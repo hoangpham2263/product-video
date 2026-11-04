@@ -34,11 +34,13 @@ function Get-HubFfmpeg {
     return $exe
 }
 
-# ffmpeg with its output kept (it writes everything to stderr); throws with the last lines when it fails.
-function Invoke-HubFfmpeg([string[]]$Arguments) {
+# ffmpeg with its output kept (it writes everything to stderr). $Folder: where it runs, for a filter that writes a
+# file by a relative name (a C: path in a filter option needs escaping).
+function Invoke-HubFfmpeg([string[]]$Arguments, [string]$Folder = '') {
     $ffmpeg = Get-HubFfmpeg
     $info = [Diagnostics.ProcessStartInfo]::new($ffmpeg)
     $info.Arguments = ($Arguments | ForEach-Object { ConvertTo-CliArgument $_ }) -join ' '
+    if ($Folder) { $info.WorkingDirectory = $Folder }
     $info.UseShellExecute = $false; $info.RedirectStandardError = $true; $info.RedirectStandardOutput = $true; $info.CreateNoWindow = $true
     $process = [Diagnostics.Process]::Start($info)
     $stdout = $process.StandardOutput.ReadToEndAsync()
