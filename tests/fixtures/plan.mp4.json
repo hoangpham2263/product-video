@@ -1,0 +1,8 @@
+{
+  "note": "Toàn cảnh chính diện -> cận mép gỗ (trượt ngang) -> toàn cảnh nghiêng; chuyển cảnh hoà hình.",
+  "shots": [
+    { "start": 0, "angle": "as-photo" },
+    { "start": 3.0, "angle": "detail" },
+    { "start": 5.25, "angle": "three-quarter-left" }
+  ]
+}

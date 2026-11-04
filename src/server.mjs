@@ -4,7 +4,7 @@
 import { createServer } from "node:http";
 import { spawn, execFile } from "node:child_process";
 import { createInterface } from "node:readline";
-import { mkdir, writeFile, appendFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, appendFile, readFile, readdir } from "node:fs/promises";
 import { createReadStream, existsSync, mkdirSync, openSync, readFileSync, statSync, renameSync, appendFileSync } from "node:fs";
 import { join, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,7 +41,53 @@ const SERVED_EXT = [...IMAGE_EXT, ".mp4", ".mov", ".webm"];
 const CORE_ASSETS = ["tool.css", "hub.js"];
 
 const readJson = async (file) => JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
-const pageData = async () => ({ settings: await readJson(join(root, "data", "video.json")) });
+const pageData = async () => {
+  const angles = await readJson(join(root, "data", "angles.json"));
+  return { settings: await readJson(join(root, "data", "video.json")), angles: { groups: angles.groups, list: angles.angles.map(({ id, label, group, description }) => ({ id, label, group, description })) } };
+};
+
+// ----- Phân tích video mẫu -----
+// src/analyze-reference.ps1 reads a sample the way the run does (plan.ps1) and prints @@RESULT { shots, ... }; its
+// frames go to workspace/temp/analyze/<hash of the path>/. Lưu writes the plan beside the video as <video>.json (only a
+// video under workspace/), the shape the library uses: { note?, shots: [{ start, angle }] }.
+const VIDEO_EXT = [".mp4", ".mov", ".webm"];
+const libraryRoot = join(workspace, "library");
+let analyzing = false;
+async function libraryVideos(dir = libraryRoot, out = []) {
+  for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) await libraryVideos(full, out);
+    else if (VIDEO_EXT.includes(extname(e.name).toLowerCase())) out.push({ path: full, name: full.slice(libraryRoot.length + 1).replace(/\\/g, "/"), plan: existsSync(`${full}.json`) });
+  }
+  return out;
+}
+function analyze(video) {
+  const outDir = join(workspace, "temp", "analyze", createHash("sha1").update(video).digest("hex").slice(0, 12));
+  return new Promise((done, fail) => execFile(PWSH, psFile(join(root, "src", "analyze-reference.ps1"), ["-Video", video, "-OutDir", outDir]), { cwd: root, env: toolEnv, timeout: 600000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, out, errOut) => {
+    const line = String(out).split(/\r?\n/).find((l) => l.startsWith("@@RESULT "));
+    if (line) { try { return done(JSON.parse(line.slice(9))); } catch {} }
+    logError("Phân tích video mẫu", `${err?.message || ""}\n${errOut || ""}`);
+    fail(new Error(String(errOut || err?.message || "Không phân tích được.").trim().split("\n")[0].slice(0, 300)));
+  }));
+}
+async function savePlan({ video, note, shots }) {
+  const file = resolve(String(video || ""));
+  if (!file.startsWith(workspace + sep) || !VIDEO_EXT.includes(extname(file).toLowerCase()) || !existsSync(file)) throw new Error("Chỉ lưu được kế hoạch cho video trong workspace/.");
+  const ids = (await readJson(join(root, "data", "angles.json"))).angles.map((a) => a.id);
+  const list = [].concat(shots || []).map((s) => ({ start: Math.round(Number(s?.start) * 100) / 100, angle: String(s?.angle) }));
+  if (!list.length) throw new Error("Chưa có cảnh nào.");
+  for (const s of list) {
+    if (!Number.isFinite(s.start) || s.start < 0) throw new Error("Thời điểm bắt đầu của cảnh không hợp lệ.");
+    if (!ids.includes(s.angle)) throw new Error(`Góc lạ: ${s.angle}.`);
+  }
+  list.sort((a, b) => a.start - b.start);
+  list[0].start = 0;
+  const text = String(note || "").trim();
+  // Written like the library's own plans: one shot per line.
+  const json = `{\n${text ? `  "note": ${JSON.stringify(text)},\n` : ""}  "shots": [\n${list.map((s) => `    { "start": ${s.start}, "angle": ${JSON.stringify(s.angle)} }`).join(",\n")}\n  ]\n}\n`;
+  await writeFile(`${file}.json`, json, "utf8");
+  return { path: `${file}.json`, plan: JSON.parse(json) };
+}
 
 // ----- The run -----
 const run = { proc: null, events: [], stopped: false, exitCode: null, done: false, folder: "", logFile: "" };
@@ -56,7 +102,6 @@ function receive(line) {
 async function startRun(job) {
   if (run.proc) throw new Error("Đang chạy.");
   if (!job?.photo) throw new Error("Chưa có ảnh sản phẩm.");
-  if (!job?.reference) throw new Error("Chưa chọn video mẫu.");
   await mkdir(join(workspace, "temp"), { recursive: true });
   const stamp = Date.now();
   const jobFile = join(workspace, "temp", `job-${stamp}.json`);
@@ -140,6 +185,21 @@ async function handle(req, res) {
     const file = join(uploads, `${randomUUID().replace(/-/g, "")}${ext}`);
     await writeFile(file, await body(req));
     return send(res, 200, { path: file });
+  }
+  if (path === "/api/analyze/videos" && req.method === "GET") return send(res, 200, { videos: await libraryVideos() });
+  if (path === "/api/analyze" && req.method === "POST") {
+    const { video = "" } = JSON.parse((await body(req)).toString("utf8") || "{}");
+    const file = video && resolve(String(video));
+    if (!file || !VIDEO_EXT.includes(extname(file).toLowerCase()) || !existsSync(file)) return send(res, 400, { error: "Chưa chọn video mẫu." });
+    if (analyzing) return send(res, 409, { error: "Đang phân tích một video khác." });
+    analyzing = true;
+    try { const r = await analyze(file); return send(res, r.ok ? 200 : 400, r); }
+    catch (e) { return send(res, 500, { error: e.message }); }
+    finally { analyzing = false; }
+  }
+  if (path === "/api/analyze/save" && req.method === "POST") {
+    try { return send(res, 200, await savePlan(JSON.parse((await body(req)).toString("utf8") || "{}"))); }
+    catch (e) { return send(res, 400, { error: e.message }); }
   }
   if (path === "/api/run" && req.method === "POST") {
     try { await startRun(JSON.parse((await body(req)).toString("utf8") || "{}")); return send(res, 200, { ok: true }); }

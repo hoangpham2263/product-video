@@ -41,9 +41,11 @@ function fitFrame(motions, cx, cy) {
 }
 
 export function cameraMove(frames, width, height, fps, start, end) {
-  const from = Math.max(0, Math.round(start * fps)), to = Math.min(frames.length, Math.round(end * fps));
+  // frames[i] is the step from frame i - 1 to frame i: from..to takes steps from + 1 to to, both ends included.
+  const last = Math.max(0, frames.length - 1);
+  const from = Math.min(last, Math.max(0, Math.round(start * fps))), to = Math.max(from, Math.min(last, Math.round(end * fps)));
   let panX = 0, panY = 0, zoom = 1;
-  for (let i = from + 1; i < to; i++) {
+  for (let i = from + 1; i <= to; i++) {
     const f = fitFrame(frames[i] || [], width / 2, height / 2);
     panX += f.tx / width; panY += f.ty / height; zoom *= 1 + f.s;
   }

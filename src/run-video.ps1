@@ -10,7 +10,7 @@ $OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = $OutputEncoding
 [Console]::OutputEncoding = $OutputEncoding
 
-foreach ($module in @('../core/ai/ai.ps1', 'product-rules.ps1', 'ffmpeg.ps1', 'video.ps1')) {
+foreach ($module in @('../core/ai/ai.ps1', 'product-rules.ps1', 'ffmpeg.ps1', 'plan.ps1', 'prompts.ps1', 'video.ps1')) {
     . (Join-Path $PSScriptRoot $module)
 }
 if (-not $OutDir) { $OutDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'workspace/output' }

@@ -1,25 +1,35 @@
 {
-  "note": "Theo phong cách video mẫu: ffmpeg tách cảnh theo chỗ cắt (sceneThreshold), cảnh ngắn hơn minShot giây gộp vào cảnh trước, cảnh dài hơn 15 giây chia thành đoạn nối tiếp; vidstabdetect đo máy chạy theo từng chặng khoảng phaseSeconds giây của mẫu, mỗi chặng giới hạn maxZoom (đẩy/kéo) và maxPan (trượt, phần khung). Độ dài video: như mẫu hoặc lengths giây (giãn đều, máy chạy chậm hơn). Bối cảnh lấy từ ảnh sản phẩm. Chỉ dùng maxSeconds giây đầu, tối đa maxParts đoạn. Grok chỉ làm 6, 10 hoặc 15 giây; mỗi đoạn được tăng/giảm tốc cho đúng độ dài đoạn mẫu; đoạn nối tiếp trộn mờ fadeSeconds.",
-  "grokSeconds": [
-    6,
-    10,
-    15
-  ],
-  "lengths": [30, 45, 60],
-  "resolutions": [
-    "480p",
-    "720p",
-    "1080p"
-  ],
+  "note": "Một cách làm: video là chuỗi cảnh ngắn (tối đa shotSeconds giây), mỗi cảnh một góc (data/angles.json) và một kiểu máy chạy. Codex CLI vẽ khung góc từ ảnh sản phẩm (codexParallel khung cùng lúc), Grok quay clip grokSeconds giây từ khung đó, lấy phần đầu ở tốc độ thật, hoà hình fadeSeconds. Có video mẫu: học cách làm (chỗ cắt theo sceneThreshold/minShot hoặc kế hoạch <video>.json, máy chạy đo bằng vidstabdetect, giới hạn maxZoom/maxPan), chỉ dùng maxSeconds giây đầu; cảnh không có góc trong kế hoạch lấy lần lượt từ angles. Không có video mẫu: defaultShots lần lượt. Độ dài: lengths (0 = như mẫu, không có mẫu thì defaultLength). Khổ: aspects (auto = theo mẫu, không có mẫu thì 2:3); Codex chỉ vẽ 2:3, 3:2, 1:1. Tối đa maxShots cảnh. Chuyển động trong defaultShots là lượng thấy được trong một cảnh (zoom 1.04 = to lên 4%; panX âm = máy trượt phải; panY dương = máy nâng lên).",
+  "lengths": [20, 30, 45, 60],
+  "defaultLength": 30,
+  "aspects": ["auto", "2:3", "1:1", "3:2"],
+  "resolutions": ["480p", "720p", "1080p"],
   "defaultResolution": "720p",
+  "grokSeconds": 6,
+  "shotSeconds": 2.6,
+  "fadeSeconds": 0.4,
+  "maxShots": 24,
+  "codexParallel": 4,
   "sceneThreshold": 0.15,
   "minShot": 1,
-  "phaseSeconds": 4,
+  "maxSeconds": 60,
   "maxZoom": 1.25,
   "maxPan": 0.12,
-  "fadeSeconds": 0.2,
-  "shotFadeSeconds": 0.5,
-  "maxSeconds": 60,
-  "maxParts": 12,
-  "minutesPerPart": 1.5
+  "angles": ["close-up", "room-wide", "detail", "high", "profile-left", "medium", "overhead", "hero"],
+  "defaultShots": [
+    { "angle": "as-photo", "panX": 0, "panY": 0, "zoom": 1.04 },
+    { "angle": "close-up", "panX": -0.04, "panY": 0, "zoom": 1 },
+    { "angle": "room-wide", "panX": 0, "panY": 0, "zoom": 1.04 },
+    { "angle": "detail", "panX": 0.04, "panY": 0, "zoom": 1 },
+    { "angle": "high", "panX": 0, "panY": 0, "zoom": 1.04 },
+    { "angle": "profile-left", "panX": -0.04, "panY": 0, "zoom": 1 },
+    { "angle": "medium", "panX": 0.04, "panY": 0, "zoom": 1 },
+    { "angle": "overhead", "panX": 0, "panY": 0, "zoom": 1.04 },
+    { "angle": "hero", "panX": 0, "panY": 0.035, "zoom": 1 },
+    { "angle": "three-quarter-left", "panX": -0.04, "panY": 0, "zoom": 1 },
+    { "angle": "product-full", "panX": 0, "panY": 0, "zoom": 1.04 },
+    { "angle": "as-photo", "panX": 0, "panY": 0, "zoom": 0.96 }
+  ],
+  "minutesPerShot": 1.2,
+  "minutesPerFrameRound": 2
 }
