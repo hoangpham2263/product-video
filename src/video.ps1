@@ -3,11 +3,15 @@
 #   1. The sample is read with ffmpeg: its cuts (scene change) split it into shots; a shot longer than Grok can make
 #      (15 s) is split into parts that follow each other. vidstabdetect measures the camera's move, in phases of a few
 #      seconds (src/motion.mjs): sideways, up or down, in or out.
-#   2. Only with a model photo: one key frame (Grok image), the model presenting the product in the photo's room.
+#      A sample in the library may carry a plan (<video>.json beside it: its shots and each shot's angle, from
+#      data/angles.json); then the shots are the plan's.
+#   2. Key frames (Grok image): with a model photo, the model presenting the product in the photo's room; for a planned
+#      shot of another angle (a close-up, a three-quarter view), the photo's room seen from that angle.
 #   3. Clips (Grok video): one per part, from the product photo (or the model frame) and the measured move as words; a
 #      part that continues a shot starts on the real last frame of the part before it. Each clip is then sped up or
 #      slowed down to its part's length, so the video keeps the sample's pace and cuts.
-#   4. One video: parts of one shot fade into each other, shots cut.
+#   4. One video: parts of one shot fade into each other (fadeSeconds), and a new shot dissolves in (shotFadeSeconds):
+#      the user found a straight cut to another angle too sudden (04/11/2026).
 # Tried 04/11/2026: redrawing the sample's own frames with the product (to copy it exactly) made the room's things slide
 # and change between frames, and the user wants the style, not the sample's room.
 # Output: workspace/output/<time>-<product>/: clip-<i>-grok.mp4, clip-<i>.mp4, video-<product>.mp4, logs/.
@@ -55,9 +59,10 @@ function Get-VideoAspect([int]$Width, [int]$Height) {
     if ($ratio -lt 0.8) { '9:16' } elseif ($ratio -gt 1.25) { '16:9' } else { '1:1' }
 }
 
-# Where the sample cuts (seconds), from ffmpeg's scene score.
+# Where the sample changes shot (seconds), from ffmpeg's scene score between frames half a second apart: a dissolve
+# changes little from one frame to the next and reads as no cut (tried 04/11/2026: 0.03 at most, frame by frame).
 function Get-ReferenceCuts([string]$Video, [double]$Threshold) {
-    $log = (Invoke-HubFfmpeg @('-hide_banner', '-i', $Video, '-an', '-filter:v', "select='gt(scene,$(Format-Seconds $Threshold))',showinfo", '-f', 'null', '-')).Log
+    $log = (Invoke-HubFfmpeg @('-hide_banner', '-i', $Video, '-map', '0:v:0', '-an', '-filter:v', "fps=2,select='gt(scene,$(Format-Seconds $Threshold))',showinfo", '-f', 'null', '-')).Log
     @([regex]::Matches($log, 'pts_time:([\d.]+)') | ForEach-Object { [double]::Parse($_.Groups[1].Value, $script:Invariant) })
 }
 
@@ -65,7 +70,8 @@ function Get-ReferenceCuts([string]$Video, [double]$Threshold) {
 # parts of at most the longest Grok clip. Only the first maxSeconds of the sample are used. $Length (seconds, 0: as
 # the sample) stretches every shot alike: the same moves and cuts, the camera slower.
 #   { Shot, Start, End (in the sample), Seconds (in the video), GrokSeconds, Continues }
-function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings, [double]$Length = 0) {
+# $Angles: the angle of each shot, from a plan (as-photo when there is none).
+function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings, [double]$Length = 0, [string[]]$Angles = @()) {
     $end = [Math]::Min($Duration, [double]$Settings.maxSeconds)
     $stretch = if ($Length -gt 0) { $Length / $end } else { 1 }
     $bounds = @(0.0)
@@ -86,6 +92,7 @@ function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings, [doub
             $parts += [pscustomobject]@{
                 Shot = $s + 1; Start = $bounds[$s] + $p * $source / $count; End = $bounds[$s] + ($p + 1) * $source / $count
                 Seconds = $seconds; GrokSeconds = $(if ($grok) { $grok } else { $longest }); Continues = $p -gt 0
+                Angle = $(if ($s -lt $Angles.Count -and $Angles[$s]) { $Angles[$s] } else { 'as-photo' })
             }
         }
     }
@@ -93,11 +100,23 @@ function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings, [doub
     $parts
 }
 
+# The plan of a library sample (<video>.json): { shots: [{ start, angle }] }, start in seconds, angle an id of
+# data/angles.json. None: $null.
+function Read-ReferencePlan([string]$Video) {
+    $file = "$Video.json"
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $null }
+    $plan = Read-JsonFile $file
+    $ids = @((Read-JsonFile (Join-Path (Get-ToolRoot) 'data/angles.json')).angles | ForEach-Object { $_.id })
+    $shots = @($plan.shots | Sort-Object { [double]$_.start })
+    foreach ($shot in $shots) { if ($ids -notcontains [string]$shot.angle) { throw "Kế hoạch của video mẫu có góc lạ: $($shot.angle)." } }
+    [pscustomobject]@{ Cuts = @($shots | Select-Object -Skip 1 | ForEach-Object { [double]$_.start }); Angles = @($shots | ForEach-Object { [string]$_.angle }) }
+}
+
 # The camera's move over the whole sample, measured once: vidstabdetect at 5 frames a second (a slow move shifts less
 # than a pixel from one frame to the next and would read as still), 720 wide. Writes logs/mau.trf.
 function Save-ReferenceMotion([string]$Video, $Info, [string]$Logs) {
     $height = [Math]::Round(720 * $Info.Height / $Info.Width / 2) * 2
-    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-an', '-filter:v', 'fps=5,scale=720:-2,vidstabdetect=shakiness=8:accuracy=15:stepsize=4:result=mau.trf', '-f', 'null', '-') $Logs) 'đo được chuyển động của video mẫu'
+    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-map', '0:v:0', '-an', '-filter:v', 'fps=5,scale=720:-2,vidstabdetect=shakiness=8:accuracy=15:stepsize=4:result=mau.trf', '-f', 'null', '-') $Logs) 'đo được chuyển động của video mẫu'
     [pscustomobject]@{ File = Join-Path $Logs 'mau.trf'; Width = 720; Height = $height; Fps = 5 }
 }
 
@@ -149,10 +168,11 @@ function Set-HubVideoLength([string]$Video, [double]$Seconds, [string]$Output, [
     Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-an', '-filter:v', "setpts=$(Format-Seconds $factor)*PTS,framerate=fps=$Fps", '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', $Output)) 'chỉnh được độ dài clip'
 }
 
-# The parts as one video: a part that continues the one before fades into it over $Fade seconds, a new shot cuts.
-# Tried 04/11/2026: Grok redraws its start image slightly on the clip's second frame, so a plain join jumps there.
-#   $Items: { File, FadeIn }, all at $Fps (Set-HubVideoLength).
-function Join-PartClips($Items, [string]$Output, [double]$Fade, [int]$Fps = 30) {
+# The parts as one video, each fading into the one before over its Fade seconds (0: a straight cut). Tried 04/11/2026:
+# Grok redraws its start image slightly on the clip's second frame, so even a part that continues a shot jumps when
+# joined straight.
+#   $Items: { File, Fade }, all at $Fps (Set-HubVideoLength).
+function Join-PartClips($Items, [string]$Output, [int]$Fps = 30) {
     $first = Get-HubVideoInfo $Items[0].File
     $w = $first.Width - ($first.Width % 2); $h = $first.Height - ($first.Height % 2)
     $inputs = @(); $chains = @()
@@ -163,9 +183,10 @@ function Join-PartClips($Items, [string]$Output, [double]$Fade, [int]$Fps = 30) 
     $label = 'v0'; $length = $first.Seconds
     for ($k = 1; $k -lt $Items.Count; $k++) {
         $seconds = (Get-HubVideoInfo $Items[$k].File).Seconds
-        if ($Items[$k].FadeIn) {
-            $chains += "[$label][v$k]xfade=transition=fade:duration=$(Format-Seconds $Fade):offset=$(Format-Seconds ($length - $Fade))[j$k]"
-            $length += $seconds - $Fade
+        $fade = [double]$Items[$k].Fade
+        if ($fade -gt 0) {
+            $chains += "[$label][v$k]xfade=transition=fade:duration=$(Format-Seconds $fade):offset=$(Format-Seconds ($length - $fade))[j$k]"
+            $length += $seconds - $fade
         } else {
             $chains += "[$label][v$k]concat=n=2:v=1:a=0[j$k]"
             $length += $seconds
@@ -197,6 +218,28 @@ Place the person standing on the floor next to the product, at true scale, turne
 
 STEP 4 - LIGHT AND OUTPUT
 Light the person with the room's own light and direction, with matching shadows. $script:VideoLight
+"@
+}
+
+# A planned shot's opening frame: the room of the product photo seen from another angle (data/angles.json).
+function New-AngleFramePrompt([string]$ProductName, $Angle) {
+    @"
+TASK: RE-PHOTOGRAPH the room in IMAGE 1 as ONE new photorealistic photograph taken from a different camera position. Image 1 is the only reference for the room and the product; the new photograph must not repeat its framing.
+Target product: $ProductName. This is the opening frame of one shot of a product film made in this room.
+
+STEP 1 - ROOM
+Image 1 is the only room. Its walls, floor, windows, light, plants and every other object stay exactly as they are, in the same arrangement; only the camera moves and the whole view changes perspective together. Do not add, remove, move or restyle anything.
+
+STEP 2 - PRODUCT
+$(Get-VideoProductRules 1)
+Show the product without any brand name or logo.
+
+STEP 3 - CAMERA ($($Angle.label_en))
+$($Angle.text)
+Obey this framing exactly; the result must visibly be taken from this new position. A side the photo does not show stays consistent with the visible side.
+
+STEP 4 - LIGHT AND OUTPUT
+$script:VideoLight No people.
 "@
 }
 
@@ -241,13 +284,17 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
         [void](Get-HubFfmpeg)
         $info = Get-HubVideoInfo $plan.Reference
         if ($info.Seconds -lt 1) { throw 'Video mẫu quá ngắn hoặc không đọc được.' }
-        $parts = @(Get-ReferenceParts $info.Seconds (Get-ReferenceCuts $plan.Reference ([double]$plan.Settings.sceneThreshold)) $plan.Settings $plan.Length)
+        $shotPlan = Read-ReferencePlan $plan.Reference
+        $cuts = if ($shotPlan) { $shotPlan.Cuts } else { Get-ReferenceCuts $plan.Reference ([double]$plan.Settings.sceneThreshold) }
+        $parts = @(Get-ReferenceParts $info.Seconds $cuts $plan.Settings $plan.Length $(if ($shotPlan) { $shotPlan.Angles } else { @() }))
         $motion = Save-ReferenceMotion $plan.Reference $info $logs
         foreach ($part in $parts) { $part | Add-Member -NotePropertyName Moves -NotePropertyValue @(Get-PartMoves $motion $part $plan.Settings) }
     } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
     $aspect = Get-VideoAspect $info.Width $info.Height
     $total = $parts.Count
-    Send-Event @{ kind = 'start'; folder = $folder; frames = $(if ($plan.Model) { 1 } else { 0 }); parts = $total; shots = $parts[-1].Shot; seconds = [Math]::Round(($parts | Measure-Object Seconds -Sum).Sum, 1); aspect = $aspect }
+    $angles = @((Read-JsonFile (Join-Path (Get-ToolRoot) 'data/angles.json')).angles)
+    $framed = @($parts | Where-Object { -not $_.Continues -and $_.Angle -ne 'as-photo' } | ForEach-Object { $_.Angle } | Select-Object -Unique)
+    Send-Event @{ kind = 'start'; folder = $folder; frames = $(if ($plan.Model) { 1 } else { 0 }) + $framed.Count; parts = $total; shots = $parts[-1].Shot; seconds = [Math]::Round(($parts | Measure-Object Seconds -Sum).Sum, 1); aspect = $aspect }
     Write-Utf8 (Join-Path $logs 'mau.json') (ConvertTo-Json -InputObject @{ reference = $plan.Reference; width = $info.Width; height = $info.Height; seconds = $info.Seconds; aspect = $aspect; parts = $parts } -Depth 5)
     try { Start-ImageBridge (Get-ToolRoot) -NewSession } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
 
@@ -263,15 +310,32 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
         Send-Event $event
     }
 
-    # 3. Clips. A new shot starts from the photo (the first one from the model frame); a part that continues one starts
-    # on the real last frame of the part before.
+    # Opening frames of the planned angles, one per angle, all made from the photo itself.
+    $angleFrames = @{}
+    $index = if ($plan.Model) { 1 } else { 0 }
+    foreach ($id in $framed) {
+        if ($script:Run.Abort) { break }
+        $angle = $angles | Where-Object { $_.id -eq $id } | Select-Object -First 1
+        $file = Join-Path $folder "khung-$id.png"
+        $prompt = New-AngleFramePrompt $plan.Product $angle
+        Write-Utf8 (Join-Path $logs "khung-$id-prompt.txt") $prompt
+        $event = @{ kind = 'frame'; index = $index; label = [string]$angle.label; file = ''; ok = $true; message = '' }
+        Write-Host "  [FRAME] $id" -ForegroundColor Cyan
+        try { [void](Invoke-GrokStep 'image' $prompt @($plan.Photo) $file @{ Aspect = $aspect }); $angleFrames[$id] = $file; $event.file = $file }
+        catch { $event.ok = $false; $event.message = "$($_.Exception.Message) Cảnh này bắt đầu từ ảnh sản phẩm." }
+        Send-Event $event
+        $index++
+    }
+
+    # 3. Clips. A new shot starts from its angle's frame, else the photo (the first one from the model frame); a part
+    # that continues one starts on the real last frame of the part before.
     $clips = @(); $last = @{}
     for ($i = 1; $i -le $total -and -not $script:Run.Abort; $i++) {
         $part = $parts[$i - 1]
         $raw = Join-Path $folder ("clip-{0}-grok.mp4" -f $i)
         $moveVi = ($part.Moves | ForEach-Object { $_.Vi }) -join ' → '
         $event = @{ kind = 'clip'; index = $i; label = "Cảnh $($part.Shot), $(Format-Seconds ([Math]::Round($part.Seconds, 1)))s, $moveVi"; file = ''; ok = $true; message = '' }
-        $start = if ($part.Continues) { $last[$i - 1] } elseif ($i -eq 1) { $opening } else { $plan.Photo }
+        $start = if ($part.Continues) { $last[$i - 1] } elseif ($angleFrames[$part.Angle]) { $angleFrames[$part.Angle] } elseif ($i -eq 1) { $opening } else { $plan.Photo }
         $person = $i -eq 1 -and $opening -ne $plan.Photo
         $prompt = New-ClipPrompt $plan.Product $i $total $part.GrokSeconds $part.Moves $person
         Write-Utf8 (Join-Path $logs "clip-$i-prompt.txt") $prompt
@@ -286,23 +350,22 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
         Send-Event $event
     }
 
-    # 4. One video. Each clip is brought to its part's length, plus the fade into the next part when that one continues
-    # it (and was made), so the video keeps the sample's length.
+    # 4. One video. Each clip is brought to its part's length plus the fade into the clip after it, so the video keeps
+    # the sample's length.
     $ok = $false
     if ($clips.Count) {
         if ($clips.Count -lt $total) { Send-Event @{ kind = 'warning'; message = "Chỉ $($clips.Count)/$total đoạn tạo được; video ghép từ các đoạn đó." } }
         $final = Join-Path $folder "video-$slug.mp4"
-        $fade = [double]$plan.Settings.fadeSeconds
+        $fadeIn = { param($k) if ($k -eq 0) { 0 } elseif ($clips[$k - 1].Index -eq $clips[$k].Index - 1 -and $parts[$clips[$k].Index - 1].Continues) { [double]$plan.Settings.fadeSeconds } else { [double]$plan.Settings.shotFadeSeconds } }
         try {
             $items = @()
             for ($k = 0; $k -lt $clips.Count; $k++) {
                 $clip = $clips[$k]
-                $next = if ($k + 1 -lt $clips.Count) { $clips[$k + 1] } else { $null }
-                $fadeOut = $next -and $next.Index -eq $clip.Index + 1 -and $parts[$next.Index - 1].Continues
-                Set-HubVideoLength $clip.Raw ($parts[$clip.Index - 1].Seconds + $(if ($fadeOut) { $fade } else { 0 })) $clip.File
-                $items += [pscustomobject]@{ File = $clip.File; FadeIn = $k -gt 0 -and $clips[$k - 1].Index -eq $clip.Index - 1 -and $parts[$clip.Index - 1].Continues }
+                $fadeOut = if ($k + 1 -lt $clips.Count) { & $fadeIn ($k + 1) } else { 0 }
+                Set-HubVideoLength $clip.Raw ($parts[$clip.Index - 1].Seconds + $fadeOut) $clip.File
+                $items += [pscustomobject]@{ File = $clip.File; Fade = (& $fadeIn $k) }
             }
-            Join-PartClips $items $final $fade
+            Join-PartClips $items $final
             $out = Get-HubVideoInfo $final
             Send-Event @{ kind = 'final'; file = $final; seconds = [Math]::Round($out.Seconds, 1); width = $out.Width; height = $out.Height }
             $ok = $true

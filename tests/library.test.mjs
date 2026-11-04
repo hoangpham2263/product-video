@@ -61,3 +61,17 @@ test("offline, the list says so instead of failing", async () => {
     assert.match(r.data.error, /Không kết nối được kho ảnh/);
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
+
+test("a picked video saves its plan beside it, for the run", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "pv-lib-"));
+  try {
+    const plan = { shots: [{ start: 0, angle: "as-photo" }, { start: 3, angle: "detail" }] };
+    const data = { groups: [{ kind: "videos", name: "Mẫu", files: [{ name: "v.mp4", plan }, { name: "w.mp4" }] }] };
+    const handle = createLibrary({ workspace, request: async (url) => new Response(url.endsWith("manifest.json") ? JSON.stringify(data) : "mp4-bytes") });
+    const r = await call(handle, "POST", "/api/library/pick", { kind: "videos", group: "Mẫu", name: "v.mp4" });
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(await readFile(`${r.data.path}.json`, "utf8")), plan);
+    const w = await call(handle, "POST", "/api/library/pick", { kind: "videos", group: "Mẫu", name: "w.mp4" });
+    await assert.rejects(readFile(`${w.data.path}.json`, "utf8"));
+  } finally { await rm(workspace, { recursive: true, force: true }); }
+});

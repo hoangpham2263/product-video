@@ -1,11 +1,12 @@
 // Kho ảnh: the public GitHub repo hoangpham2263/product-video-sources. manifest.json lists its groups, each of one kind
 // (products, models, videos) with its files; a file is <kind>/<group>/<name>. The window shows a kind's switched-on
 // groups with raw links as thumbnails; a picked photo or video is downloaded once into workspace/library/<kind>/<group>/
-// and its local path goes into the job, as an uploaded one does. PV_SOURCES_URL points tests at a local copy.
+// and its local path goes into the job, as an uploaded one does. A video's plan (its shots and angles, in the manifest)
+// is saved beside it as <video>.json, where the run reads it. PV_SOURCES_URL points tests at a local copy.
 //   GET  /api/library?kind=products|models|videos{ groups: [{ name, files: [{ name, url, local }] }] } or { error }
 //   POST /api/library/pick { kind, group, name }   { path }
 import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -69,6 +70,11 @@ export function createLibrary({ workspace, base = process.env.PV_SOURCES_URL || 
           json(res, 502, { error: "Chưa tải được tệp từ kho. Kiểm tra mạng rồi thử lại." });
           return true;
         }
+      }
+      if (kind === "videos") {
+        const entry = [].concat((await manifest().catch(() => ({}))).groups || []).find((g) => g.kind === kind && g.name.normalize("NFC") === group.normalize("NFC"))?.files?.find((f) => f.name === name);
+        if (entry?.plan) await writeFile(`${file}.json`, JSON.stringify(entry.plan));
+        else await rm(`${file}.json`, { force: true });
       }
       json(res, 200, { path: file });
       return true;

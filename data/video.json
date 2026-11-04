@@ -12,12 +12,13 @@
     "1080p"
   ],
   "defaultResolution": "720p",
-  "sceneThreshold": 0.3,
+  "sceneThreshold": 0.15,
   "minShot": 1,
   "phaseSeconds": 4,
   "maxZoom": 1.25,
   "maxPan": 0.12,
   "fadeSeconds": 0.2,
+  "shotFadeSeconds": 0.5,
   "maxSeconds": 60,
   "maxParts": 12,
   "minutesPerPart": 1.5
