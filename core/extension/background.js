@@ -1,12 +1,12 @@
 // Router: keeps a WebSocket to the local bridge (core/bridge) and forwards each job to the matching tab.
 // The job is submitted inside the signed-in tab, so the page itself handles its own anti-abuse checks.
 // It runs in the user's own Chrome: jobs only use tabs it opened itself, in the Chrome window already open, in a tab
-// group named Product Review; the user's own tabs are never touched. Jobs run side by side (the bridge sends at most as many
+// group named Product Video; the user's own tabs are never touched. Jobs run side by side (the bridge sends at most as many
 // as a tool runs threads), each in a tab of its own, opened in the background and closed once the job is done; a run
 // starts by closing the group's tabs (session). A site only works in a tab that is shown (Gemini stops answering behind
 // another tab): while a job works, the debugger keeps its tab rendering as if shown (keepShown), and Chrome shows its
 // "debugging" bar. A site's files are sites/<site>.js; a new AI is one more entry in SITES.
-const BRIDGE_URL = "ws://127.0.0.1:8775";
+const BRIDGE_URL = "ws://127.0.0.1:8785";
 // hosts: the tabs to look through; page: a tab a job can run in (a Flow project, under /u/<n>/ for another account).
 const SITES = {
   chatgpt: { hosts: "https://chatgpt.com/*", page: /^https:\/\/chatgpt\.com\//, start: "https://chatgpt.com/", fresh: true },
@@ -21,7 +21,7 @@ const startUrl = (platform, account) => SITES[platform].start + (account ? `?aut
 // Each job's tab opens on the site's start page, a new chat, so earlier images and answers are never reused.
 // The job each tab works for, so its page's steps are logged under that job.
 const tabJobs = new Map();
-const GROUP = "Product Review";
+const GROUP = "Product Video";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Chrome refuses tab changes while the user drags a tab ("Tabs cannot be edited right now"): try again shortly.
 async function tabsCall(call) {
@@ -72,7 +72,7 @@ async function jobTab(platform, account) {
   return tab;
 }
 
-// A run starts with only its own tabs: the Product Review group's tabs, in every window, are closed (Cấu hình's sign-in
+// A run starts with only its own tabs: the Product Video group's tabs, in every window, are closed (Cấu hình's sign-in
 // pages too); the user's other tabs stay. The bridge asks only while no job is waiting.
 async function newSession() {
   const groups = await chrome.tabGroups.query({ title: GROUP });
@@ -84,14 +84,14 @@ async function newSession() {
 }
 
 // A tab of the tools: in the Chrome window open now (a new window only when there is none), not brought to the front,
-// in that window's Product Review group.
+// in that window's Product Video group.
 async function toolsTab(url) {
   const window = await chrome.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => null);
   const tab = window ? await tabsCall(() => chrome.tabs.create({ url, windowId: window.id, active: false })) : (await chrome.windows.create({ url })).tabs[0];
   await group(tab);
   return tab;
 }
-// A page a tool opens for the user (Cấu hình: sign-in, Flow, Gemini): in front, in the Product Review group, with Chrome's
+// A page a tool opens for the user (Cấu hình: sign-in, Flow, Gemini): in front, in the Product Video group, with Chrome's
 // window brought forward.
 async function openPage(url) {
   const tab = await toolsTab(url);

@@ -1,4 +1,4 @@
-// What the Node server (src/mac/server.mjs) does differently on macOS and Windows: the
+// What the Node server (src/server.mjs) does differently on macOS and Windows: the
 // same pages and servers run on both; on Windows the window is core/launch.ps1's WebView2 app window.
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -47,7 +47,7 @@ export function killTree(proc) {
   try { process.kill(-proc.pid, "SIGKILL"); } catch { try { proc.kill("SIGKILL"); } catch {} }
 }
 
-// The user's own Chrome, where the Product Review extension (core/extension) is installed and the AIs are signed in: started,
+// The user's own Chrome, where the Product Video extension (core/extension) is installed and the AIs are signed in: started,
 // or a page opened in it. background: Chrome is not brought to the front (a run starting it).
 export function openChrome(url = "", { background = false } = {}) {
   return new Promise((resolve) => {

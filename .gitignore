@@ -1,6 +1,4 @@
-# Machine-local state: settings, downloaded source photos, results, logs and error reports.
+# Machine-local state: settings, downloaded library photos, results, logs and ffmpeg.
 /workspace/
 /core/bridge/node_modules/
-/worker/.wrangler/
-/worker/node_modules/
 .DS_Store

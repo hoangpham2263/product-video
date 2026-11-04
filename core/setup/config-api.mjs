@@ -1,10 +1,10 @@
-// Cấu hình, served by Product Review's server: the same steps and settings as core/setup/*.ps1, kept in
+// Cấu hình, served by Product Video's server: the same steps and settings as core/setup/*.ps1, kept in
 // workspace/config.
 //   GET /setup[?back=<path>]        the Cấu hình page (page.html, page.js; tool.css from core/assets)
 //   POST /api/setup                 the steps (setup-check.ps1 -AsJson)
 //   POST /api/setup-step {step}     install: Codex and the bridge (core/bridge); login: codex login with a
 //                                   one-time code, typed on the sign-in page opened in the user's Chrome;
-//                                   browser: Chrome's extensions page and core/extension, to install the Product Review
+//                                   browser: Chrome's extensions page and core/extension, to install the Product Video
 //                                   extension; google: Google's account chooser in Chrome (sign in, add or switch);
 //                                   site {site}: gemini, flow or chatgpt opened there; antigravity: a terminal
 //                                   with agy, where /login (/logout first to switch) signs it in
@@ -44,7 +44,7 @@ export function createConfigApi({ hubRoot, pwsh, env = process.env }) {
   const googleAccount = () => { try { return String(JSON.parse(readFileSync(googleFile, "utf8")).email || ""); } catch { return ""; } };
   const withAccount = (url) => (googleAccount() ? `${url}?authuser=${encodeURIComponent(googleAccount())}` : url);
   const workspace = q(join(hubRoot, "workspace"));
-  // A page in the user's own Chrome, where the AIs are signed in: in the Product Review tab group, opened by the extension
+  // A page in the user's own Chrome, where the AIs are signed in: in the Product Video tab group, opened by the extension
   // (core/bridge/ensure.mjs --open; without the extension, a plain new tab).
   const openInChrome = (url, done) => execFile(process.execPath, [join(hubRoot, "core", "bridge", "ensure.mjs"), "--open", url], { cwd: hubRoot, env, timeout: 120000, windowsHide: true }, (err, stdout) => {
     let r = {}; try { r = JSON.parse(String(stdout).trim().split(/\r?\n/).pop()); } catch { r = { error: err?.message || "Không mở được Chrome." }; }
@@ -102,9 +102,9 @@ export function createConfigApi({ hubRoot, pwsh, env = process.env }) {
       // Cài (Codex via npm, then the bridge) or Đăng nhập (opens the browser, waits for the sign-in).
       const { step, site } = await body(req);
       // Each AI's own sign-in page in Chrome, to sign in or switch accounts there.
-      const SITES = { gemini: "https://gemini.google.com/app", flow: "https://flow.google.com/", chatgpt: "https://chatgpt.com/" };
+      const SITES = { gemini: "https://gemini.google.com/app", flow: "https://flow.google.com/", chatgpt: "https://chatgpt.com/", grok: "https://grok.com/imagine" };
       if (step === "google" || (step === "site" && SITES[site])) {
-        const url = step === "google" ? "https://accounts.google.com/AccountChooser?continue=https%3A%2F%2Fgemini.google.com%2Fapp" : site === "chatgpt" ? SITES[site] : withAccount(SITES[site]);
+        const url = step === "google" ? "https://accounts.google.com/AccountChooser?continue=https%3A%2F%2Fgemini.google.com%2Fapp" : ["chatgpt", "grok"].includes(site) ? SITES[site] : withAccount(SITES[site]);
         openInChrome(url, (r) => json(res, r.error ? 500 : 200, r));
         return true;
       }
@@ -134,12 +134,8 @@ export function createConfigApi({ hubRoot, pwsh, env = process.env }) {
       // Anything else (a site not listed, an unknown step) is refused; only Cài is left below.
       if (step !== "install") { json(res, 400, { error: "Bước không hỗ trợ." }); return true; }
       if (!npm) { json(res, 400, { error: "Chưa có Node.js. Mở lại start-app để cài." }); return true; }
-      const [cmd, args] = [npm, ["install", "-g", "@openai/codex"]];
-      runTool(cmd, args, { cwd: hubRoot, timeout: 15 * 60000, env, windowsHide: true }, (err, stdout, stderr) => {
-        if (err) return json(res, 500, { error: (String(stderr || stdout).trim().split(/\r?\n/).pop() || err.message).slice(0, 300) });
-        // The shared bridge between the tools and the Product Review extension (core/bridge).
-        runTool(npm, ["install", "--silent"], { cwd: join(hubRoot, "core", "bridge"), timeout: 10 * 60000, env, windowsHide: true }, () => json(res, 200, { ok: true }));
-      });
+      // The bridge between the app and the Product Video extension (core/bridge).
+      runTool(npm, ["install", "--silent"], { cwd: join(hubRoot, "core", "bridge"), timeout: 10 * 60000, env, windowsHide: true }, () => json(res, 200, { ok: true }));
       return true;
     }
     if (path === "/api/usage" && req.method === "GET") {

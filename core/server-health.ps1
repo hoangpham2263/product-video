@@ -37,5 +37,5 @@ function Select-HubServerPort([int]$BasePort,[string]$AddressFile) {
         if(Test-HubServer){return $candidate}
     }
     if($firstFree){return $firstFree}
-    throw 'Không tìm được cổng trống cho Product Review. Đóng các phiên cũ rồi mở lại.'
+    throw 'Không tìm được cổng trống cho Product Video. Đóng các phiên cũ rồi mở lại.'
 }

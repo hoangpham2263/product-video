@@ -1,10 +1,10 @@
-﻿# Run from Cập nhật: bring Product Review up to the latest GitHub Release (vX.Y.Z) of hoangpham2263/product-review.
+﻿# Run from Cập nhật: bring Product Video up to the latest GitHub Release (vX.Y.Z) of hoangpham2263/product-video.
 # Git checkouts use git pull; ZIP installs download the newest release ZIP. User data is never touched.
 # -Check prints the newer version ('' when current); -Apply installs it (the app reopens itself afterwards).
 param([string]$Root = (Split-Path $PSScriptRoot -Parent), [switch]$NoRun, [switch]$Check, [switch]$Apply)
 $ErrorActionPreference = 'Stop'
-$script:Repo = 'hoangpham2263/product-review'
-$script:Asset = 'product-review.zip'
+$script:Repo = 'hoangpham2263/product-video'
+$script:Asset = 'product-video.zip'
 # Local data the app writes; an update keeps it as it is (AGENTS.md is merged, see Merge-AgentInstructions).
 $script:KeepPaths = '^(workspace|\.git|core/bridge/node_modules|AGENTS\.md)(/|$)'
 
@@ -69,7 +69,7 @@ function Merge-AgentInstructions([string]$Source, [string]$Target) {
 
 function Get-LatestRelease {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-    return Invoke-RestMethod -Uri "https://api.github.com/repos/$script:Repo/releases/latest" -Headers @{ 'User-Agent' = 'product-review' } -TimeoutSec 10
+    return Invoke-RestMethod -Uri "https://api.github.com/repos/$script:Repo/releases/latest" -Headers @{ 'User-Agent' = 'product-video' } -TimeoutSec 10
 }
 
 # The version in use: the release a ZIP install came from, or the newest tag of a git checkout (as Get-AppVersion).
@@ -91,21 +91,21 @@ function Update-App([string]$Root) {
         if (Get-Command git -ErrorAction SilentlyContinue) { git -C $Root pull --ff-only --quiet 2>$null | Out-Null }
         return
     }
-    $headers = @{ 'User-Agent' = 'product-review' }
+    $headers = @{ 'User-Agent' = 'product-video' }
     $release = Get-LatestRelease
     $latest = $release.tag_name
     $asset = @($release.assets | Where-Object name -eq $script:Asset)
     if ($latest -notmatch '^v\d+(\.\d+)*$' -or -not $asset.Count) { return }
     $versionFile = Join-Path $Root 'workspace/version.txt'
     if ((Test-Path -LiteralPath $versionFile) -and (Get-Content -LiteralPath $versionFile -Raw).Trim() -eq $latest) { return }
-    $temp = Join-Path ([IO.Path]::GetTempPath()) ('product-review-update-' + [Guid]::NewGuid().ToString('N'))
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ('product-video-update-' + [Guid]::NewGuid().ToString('N'))
     try {
         New-Item -ItemType Directory -Force -Path $temp | Out-Null
         $zip = Join-Path $temp 'app.zip'
         Invoke-WebRequest -Uri $asset[0].browser_download_url -Headers $headers -OutFile $zip -UseBasicParsing -TimeoutSec 120
         Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $temp 'x') -Force
         $source = @(Get-ChildItem -LiteralPath (Join-Path $temp 'x') -Directory)[0].FullName
-        if (-not (Test-Path -LiteralPath (Join-Path $source 'core/update.ps1'))) { throw 'ZIP không đúng cấu trúc Product Review.' }
+        if (-not (Test-Path -LiteralPath (Join-Path $source 'core/update.ps1'))) { throw 'ZIP không đúng cấu trúc Product Video.' }
         Copy-AppUpdate $source $Root
         Merge-AgentInstructions $source $Root
         New-Item -ItemType Directory -Force -Path (Split-Path $versionFile -Parent) | Out-Null

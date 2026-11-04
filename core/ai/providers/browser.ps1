@@ -1,7 +1,7 @@
 ﻿# The web AIs (Gemini, Google Flow) in the signed-in tabs of the user's own Chrome: core/bridge (local server)
-# and core/extension (Product Review). The bridge hands the extension one job at a time, since a page only works while its
+# and core/extension (Product Video). The bridge hands the extension one job at a time, since a page only works while its
 # tab is shown, so a call also waits its turn there: up to $script:BridgeQueueSec more than its own time.
-$script:BridgeUrl = 'http://127.0.0.1:8775'
+$script:BridgeUrl = 'http://127.0.0.1:8785'
 $script:BridgeQueueSec = 1800
 $script:BridgeHubRoot = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
 
@@ -11,7 +11,7 @@ function Get-ImageBridgeStatus {
 
 # The bridge and the extension, ready: core/bridge/ensure.mjs installs and starts the bridge (again after Cập nhật),
 # starts Chrome when the extension is not connected and reloads an extension of another version. -NewSession: a run
-# starts here, so the tabs of the Product Review group are closed first (none while another tool's job runs).
+# starts here, so the tabs of the Product Video group are closed first (none while another tool's job runs).
 function Start-ImageBridge([string]$ProjectRoot, [switch]$NewSession) {
     $ensure = Join-Path $script:BridgeHubRoot 'core/bridge/ensure.mjs'
     $flags = @(if ($NewSession) { '--session' })

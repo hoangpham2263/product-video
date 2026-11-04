@@ -1,7 +1,7 @@
-﻿# ffmpeg for Grok Video: the one on PATH, else a static build downloaded once into
-# <hub>/workspace/tools/ffmpeg (eugeneware/ffmpeg-static b6.0, one gzip per OS, about 25 MB; GPL build with libx264).
+﻿# ffmpeg for Product Video: the one on PATH, else a static build downloaded once into
+# workspace/tools/ffmpeg (eugeneware/ffmpeg-static b6.0, one gzip per OS, about 25 MB; GPL build with libx264).
 # No ffprobe: what a clip is (size, length) is read from ffmpeg's own banner.
-$script:HubFfmpegDir = Join-Path (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent) 'workspace/tools/ffmpeg'
+$script:HubFfmpegDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'workspace/tools/ffmpeg'
 $script:HubFfmpegRelease = 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0'
 
 function Get-HubFfmpeg {

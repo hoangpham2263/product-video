@@ -1,4 +1,4 @@
-// Local bridge, shared by every tool: a tool POSTs a job over HTTP, the Product Review extension (core/extension, in the
+// Local bridge, shared by every tool: a tool POSTs a job over HTTP, the Product Video extension (core/extension, in the
 // user's own Chrome) receives it over WebSocket. ensure.mjs starts it and waits for the extension.
 // Jobs from every tool and thread go to the extension side by side, each in a tab of its own: up to `parallel` at once
 // (the most threads a tool runs), and per site up to `perSite` (Flow side by side; Gemini, which Google sends to its
@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 
-export const PORT = Number(process.env.BRIDGE_PORT || 8775);
+export const PORT = Number(process.env.BRIDGE_PORT || 8785);
 const MIME = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 
 // The Google account chosen on Cấu hình for Flow and Gemini (workspace/config/google-account.json); "" is Google's
@@ -103,7 +103,7 @@ export function createBridge({ fetchImpl = fetch, googleAccount = chosenGoogleAc
         const result = await ask({ type: "logins" }, 20000);
         return send(result.ok ? 200 : 502, result.ok ? { google: !!result.google, accounts: result.accounts || [], chatgpt: !!result.chatgpt } : { error: result.error });
       }
-      // A page the tools open (Cấu hình: sign-in pages, Flow, Gemini), shown in the Product Review tab group: POST { url }.
+      // A page the tools open (Cấu hình: sign-in pages, Flow, Gemini), shown in the Product Video tab group: POST { url }.
       if (req.method === "POST" && req.url === "/open") {
         if (!extension) return send(503, { error: "Extension chưa kết nối." });
         let raw = "";
@@ -113,7 +113,7 @@ export function createBridge({ fetchImpl = fetch, googleAccount = chosenGoogleAc
         const result = await ask({ type: "open", url }, 15000);
         return send(result.ok ? 200 : 502, result.ok ? { ok: true } : { error: result.error });
       }
-      // A run starts: the Product Review group's tabs are closed, so the run has only its own. Not while another tool's job
+      // A run starts: the Product Video group's tabs are closed, so the run has only its own. Not while another tool's job
       // waits or runs (skipped: busy).
       if (req.method === "POST" && req.url === "/session") {
         if (!extension) return send(503, { error: "Extension chưa kết nối." });
@@ -128,7 +128,7 @@ export function createBridge({ fetchImpl = fetch, googleAccount = chosenGoogleAc
       const job = JSON.parse(raw);
       if (!["chatgpt", "flow", "gemini", "grok"].includes(job.platform)) return send(400, { error: "platform must be chatgpt, flow, gemini or grok" });
       if (!job.prompt || !job.output) return send(400, { error: "prompt and output are required" });
-      if (!extension) return send(503, { error: "Extension chưa kết nối. Mở Chrome có cài extension Product Review." });
+      if (!extension) return send(503, { error: "Extension chưa kết nối. Mở Chrome có cài extension Product Video." });
       const images = await Promise.all((job.images || []).map(async (path, index) => ({
         name: `ref-${index + 1}${extname(path).toLowerCase()}`,
         mime: MIME[extname(path).toLowerCase()] || "application/octet-stream",
@@ -141,7 +141,7 @@ export function createBridge({ fetchImpl = fetch, googleAccount = chosenGoogleAc
       const kind = String(job.kind || KIND[job.platform]);
       const id = randomUUID();
       const result = await inTurn(job.platform, async () => {
-        if (!extension) return { ok: false, error: "Extension chưa kết nối. Mở Chrome có cài extension Product Review." };
+        if (!extension) return { ok: false, error: "Extension chưa kết nối. Mở Chrome có cài extension Product Video." };
         log(`[${id.slice(0, 8)}] ${job.platform} job sent (${running} running)`);
         const started = Date.now();
         const done = await ask({ type: "generate", id, platform: job.platform, kind, options: job.options || {}, prompt: job.prompt, images, timeoutSec, account }, (timeoutSec + 60) * 1000)

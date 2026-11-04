@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Video</title>
+<link rel="icon" href="icon.svg">
+<style>
+  :root { --bg: #fafafa; --fg: #18181b; --muted: #71717a; --line: #e4e4e7; --accent: #18181b; --on-accent: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #09090b; --fg: #fafafa; --muted: #a1a1aa; --line: #27272a; --accent: #fafafa; --on-accent: #09090b; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg); font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { width: min(360px, calc(100% - 32px)); text-align: center; }
+  img { width: 64px; height: 64px; }
+  h1 { font-size: 22px; font-weight: 500; margin: 12px 0 4px; }
+  p { color: var(--muted); margin: 0 0 20px; }
+  a.dl { display: block; padding: 11px 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); text-decoration: none; }
+  a.dl:hover { opacity: .9; }
+  small { display: block; margin-top: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <img src="icon.svg" alt="">
+  <h1>Product Video</h1>
+  <p id="version">Windows · macOS</p>
+  <a class="dl" href="https://github.com/hoangpham2263/product-video/releases/latest/download/product-video.zip">Tải về</a>
+  <small>Giải nén rồi mở start-app.cmd (Windows) hoặc start-app.command (Mac).</small>
+</main>
+<script>
+  fetch("https://api.github.com/repos/hoangpham2263/product-video/releases/latest")
+    .then((r) => r.json()).then((r) => { if (r.tag_name) document.getElementById("version").textContent = `${r.tag_name} · Windows · macOS`; })
+    .catch(() => {});
+</script>
+</body>
+</html>

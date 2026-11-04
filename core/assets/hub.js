@@ -1,10 +1,8 @@
-// Cấu hình and Cập nhật for every page the Tools Hub menu serves, on macOS and Windows (the menu and web tools): buttons
-// at the top right, where Product Review has its own; Cập nhật turns green with the version once a newer one is out.
-// Both work through the menu server (hub/picker.mjs, hub/setup/config-api.mjs). A page opened as a file has no server
-// to ask, so no buttons.
+// Cấu hình, Cập nhật and Tải lại at the top right of the page, on macOS and Windows; Cập nhật turns green with the
+// version once a newer one is out. Both work through the app's server (src/server.mjs, core/setup/config-api.mjs).
 (() => {
   // A page laid out for a minimum size (<body data-fit="960x680">) scales down to fit a smaller window instead of
-  // being squeezed or cut off, as Product Review does; below 60% it stops shrinking and scrolls. Its height, a
+  // being squeezed or cut off; below 60% it stops shrinking and scrolls. Its height, a
   // 100vh layout, is set to the scaled window's.
   const fit = /^(\d+)x(\d+)$/.exec(document.body?.dataset.fit || "");
   if (fit) {
@@ -24,7 +22,7 @@
   if (!header) return;
   const btn = Object.assign(document.createElement("button"), { type: "button", className: "btn update", textContent: "Cập nhật" });
   const config = Object.assign(document.createElement("button"), { type: "button", className: "btn config", textContent: "Cấu hình" });
-  // Tải lại: the menu starts again on the files as they are now and the page loads afresh (after an update, or when
+  // Tải lại: the server starts again on the files as they are now and the page loads afresh (after an update, or when
   // the page looks out of date).
   const reload = Object.assign(document.createElement("button"), { type: "button", className: "btn reload", textContent: "Tải lại" });
   header.append(reload, config, btn);
@@ -36,13 +34,13 @@
     const wait = () => fetch("/api/root").then((x) => (x.ok ? location.reload() : setTimeout(wait, 400))).catch(() => setTimeout(wait, 400));
     setTimeout(wait, 900);
   };
-  // The window title carries the installed version, as Product Review's does: "Grok Video Prompt v2.0.21".
+  // The window title carries the installed version: "Product Video v1.0.0".
   fetch("/api/root").then((r) => r.json()).then((r) => { if (r.version && !document.title.endsWith(r.version)) document.title = `${document.title} ${r.version}`; }).catch(() => {});
   config.onclick = showSetup;
   // The menu says whether Cấu hình is done: every step but the quota (which only reads what is left) must be OK.
   // Cấu hình turns green while something is missing; coming back from it checks again.
   const status = document.getElementById("setupStatus");
-  const STEP_NAMES = { drive: "mật khẩu app", node: "Node.js", codex: "Codex", login: "đăng nhập ChatGPT" };
+  const STEP_NAMES = { node: "Node.js", browser: "extension Product Video" };
   let setupRequest;
   function requestSetup() {
     if (setupRequest) return setupRequest;
@@ -52,10 +50,10 @@
       .then(async response => {
         const report = await response.json();
         if (!response.ok) return { error: report.error || 'Không kiểm tra được cấu hình. Bấm Kiểm tra lại.' };
-        if (!Array.isArray(report.Steps) || [...Object.keys(STEP_NAMES), 'quota'].some(id => !report.Steps.some(step => step.Id === id))) return { error: 'Kết quả cấu hình chưa đầy đủ. Bấm Kiểm tra lại.' };
+        if (!Array.isArray(report.Steps) || Object.keys(STEP_NAMES).some(id => !report.Steps.some(step => step.Id === id))) return { error: 'Kết quả cấu hình chưa đầy đủ. Bấm Kiểm tra lại.' };
         return report;
       })
-      .catch(error => ({ error: error.name === 'AbortError' ? 'Kiểm tra cấu hình quá thời gian. Bấm Kiểm tra lại.' : 'Mất kết nối với app. Đóng và mở lại Tools Hub rồi kiểm tra lại.' }))
+      .catch(error => ({ error: error.name === 'AbortError' ? 'Kiểm tra cấu hình quá thời gian. Bấm Kiểm tra lại.' : 'Mất kết nối với app. Đóng và mở lại Product Video rồi kiểm tra lại.' }))
       .finally(() => { clearTimeout(timer); setupRequest = null; });
     return setupRequest;
   }
@@ -82,7 +80,7 @@
   setTimeout(check, 3000);
   setInterval(check, 6 * 3600 * 1000);
 
-  // Same dialog as Product Review's (Show-UpdateDialog): check, then download and install with a running bar.
+  // Check, then download and install with a running bar.
   btn.onclick = async () => {
     const shade = Object.assign(document.createElement("div"), { className: "shade" });
     shade.innerHTML = `<div class="dialog" role="dialog" aria-label="Cập nhật"><div class="status"></div><div class="bar"><span></span></div><div class="actions"><button class="btn primary" type="button" hidden>Cập nhật</button><button class="btn" type="button">Đóng</button></div></div>`;
@@ -104,13 +102,13 @@
         status.textContent = "Chưa cập nhật được. Kiểm tra mạng rồi thử lại.";
         return;
       }
-      // The menu restarts on the new files; the page reloads once it answers again.
+      // The server restarts on the new files; the page reloads once it answers again.
       status.textContent = "Đã cập nhật. Đang mở lại…";
       const wait = () => fetch("/api/root").then((x) => (x.ok ? location.reload() : setTimeout(wait, 500))).catch(() => setTimeout(wait, 500));
       setTimeout(wait, 1200);
     };
   };
 
-  // Cấu hình is a page of its own (hub/setup/page.html), shared by the menu and every tool; it comes back here.
+  // Cấu hình is a page of its own (core/setup/page.html); it comes back here.
   function showSetup() { location.href = `/setup?back=${encodeURIComponent(location.pathname + location.search)}`; }
 })();

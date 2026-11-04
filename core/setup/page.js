@@ -12,8 +12,8 @@
   fetch("/api/root").then((r) => r.json()).then((r) => { if (r.version) document.title = `Cấu hình ${r.version}`; }).catch(() => {});
 
   // Which section each step is in, in this order; anything else the check adds goes under Cài đặt.
-  const AI = ["login", "google", "antigravity"];
-  const BASE = ["node", "codex", "browser"];
+  const AI = ["grok"];
+  const BASE = ["node", "browser"];
   const marks = { ok: ["✔", "darkgreen"], fail: ["✖", "firebrick"], warn: ["!", "#b06000"] };
   const items = new Map();
   const item = (id, parent) => {
@@ -29,11 +29,11 @@
   };
   for (const id of AI) item(id, $("#ai"));
   for (const id of BASE) item(id, $("#base"));
-  const NAMES = { login: "Codex (ChatGPT)", google: "Google (Flow, Gemini web)", antigravity: "Antigravity CLI", node: "Node.js", codex: "Codex", browser: "Extension Product Review" };
+  const NAMES = { grok: "Grok (grok.com)", node: "Node.js", browser: "Extension Product Video" };
   for (const [id, row] of items) row.name.textContent = NAMES[id];
   const LABELS = { install: "Cài", browser: "Mở", login: "Đăng nhập", google: "Đăng nhập", antigravity: "Đăng nhập" };
   // Beside the sign-in button: the AI's own site in Chrome, to see or switch the account there.
-  const SITES = { login: [["Mở ChatGPT", "chatgpt"]], google: [["Mở Gemini", "gemini"], ["Mở Flow", "flow"]] };
+  const SITES = { grok: [["Mở Grok", "grok"]] };
   const WAIT = {
     install: "Đang cài…",
     browser: "Đã mở trang tiện ích của Chrome và thư mục extension: bật Chế độ nhà phát triển, bấm Tải tiện ích đã giải nén, chọn thư mục vừa mở, xong bấm Kiểm tra lại.",
@@ -69,6 +69,7 @@
       row.account.hidden = !isAi;
       // Expired or signed out still names whose account it was (setup-check.ps1 keeps the last one seen).
       const lapsed = { expired: " · hết hạn", signedout: " · đã đăng xuất" }[step.SignIn] || "";
+      row.account.hidden = row.account.hidden || step.Id === "grok";
       row.account.textContent = step.Account ? `Tài khoản: ${step.Account}${lapsed}` : step.State === "ok" ? "Tài khoản: chưa đọc được email" : "Tài khoản: chưa đăng nhập";
       row.account.classList.toggle("none", !step.Account || !!lapsed);
       // Google with more than one account signed in: choose here which one Flow and Gemini run with.
@@ -88,7 +89,7 @@
       row.uses.textContent = step.Uses ? `Dùng cho: ${step.Uses}` : "";
       if (step.Id === "login" && quota && quota.State !== "wait" && quota.Detail) row.detail.textContent = `${step.Detail} Hạn mức: ${quota.Detail}`;
       if (step.Id === "antigravity" && step.State !== "ok") row.uses.textContent = `Dùng cho: ${step.Uses || "Viết review: Antigravity CLI"}. Đăng nhập trong Antigravity, đổi tài khoản cũng ở đó.`;
-      if (step.Action) {
+      if (step.Action && step.Action !== "site") {
         const signedIn = step.State === "ok";
         row.fix.textContent = signedIn && ["login", "google", "antigravity"].includes(step.Action) ? "Đổi tài khoản" : ["expired", "signedout"].includes(step.SignIn) ? "Đăng nhập lại" : LABELS[step.Action] || "Mở";
         row.fix.classList.toggle("primary", !signedIn);
@@ -102,7 +103,6 @@
         row.side.append(b);
       }
     }
-    if (!items.get("login").detail.dataset.code) watchLogin();
     $(".again").disabled = false;
     checking = false;
   };
@@ -188,27 +188,5 @@
   };
   usage();
 
-  // Model AI: the model and reasoning level Codex uses; empty keeps Codex's own default. Saved for every tool.
-  const model = $(".model"), effort = $(".effort");
-  const effortNames = { low: "Thấp · ít token nhất", medium: "Vừa", high: "Cao", xhigh: "Rất cao", max: "Tối đa", ultra: "Siêu cao" };
-  let models = [];
-  const fill = (select, values, labels, value) => { select.replaceChildren(...values.map((v, i) => Object.assign(el("option", "", labels[i]), { value: v }))); select.value = values.includes(value) ? value : ""; };
-  const fillEfforts = (value) => {
-    const m = models.find((x) => x.slug === model.value);
-    const efforts = ["", ...(m ? [].concat(m.efforts || []) : ["low", "medium", "high"])];
-    fill(effort, efforts, efforts.map((e) => (e ? effortNames[e] + (m && e === m.default_effort ? " (mặc định)" : "") : "Mức suy nghĩ mặc định")), value);
-  };
-  model.onchange = effort.onchange = async () => {
-    fillEfforts(effort.value);
-    const r = await post("/api/config/ai", { model: model.value, effort: effort.value });
-    if (r.error) alert(r.error);
-  };
-  fetch("/api/config/ai").then((r) => r.json()).then((r) => {
-    models = [].concat(r.models || []);
-    const saved = r.settings || {};
-    if (saved.model && !models.some((m) => m.slug === saved.model)) models.unshift({ slug: saved.model, name: saved.model, efforts: ["low", "medium", "high"], default_effort: "" });
-    fill(model, ["", ...models.map((m) => m.slug)], ["Model mặc định của Codex", ...models.map((m) => m.name)], saved.model || "");
-    fillEfforts(saved.effort || "");
-  }).catch(() => { fill(model, [""], ["Model mặc định của Codex"], ""); fillEfforts(""); });
   check();
 })();

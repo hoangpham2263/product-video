@@ -1,6 +1,6 @@
 // The app window on macOS (core/platform.mjs appWindow): Chrome for Testing in workspace/browser with a
 // profile of its own (workspace/browser/app), so a tool opens as an app window (no tabs or address bar); not downloaded,
-// the user's Chrome shows them. The AIs (Flow, Gemini, ChatGPT) run in the user's own Chrome through the Product Review
+// the user's Chrome shows them. The AIs (Flow, Gemini, ChatGPT) run in the user's own Chrome through the Product Video
 // extension (core/extension, core/bridge), not here.
 //   node core/browser.mjs download   download it (about 150 MB), once
 //   node core/browser.mjs status     { installed }

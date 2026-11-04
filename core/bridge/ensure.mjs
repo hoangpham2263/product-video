@@ -1,8 +1,8 @@
-// Gets the bridge (server.mjs) and the Product Review extension ready for a tool, and prints one JSON line:
+// Gets the bridge (server.mjs) and the Product Video extension ready for a tool, and prints one JSON line:
 //   node core/bridge/ensure.mjs [--logins] [--no-open] [--open <url>] [--session]
 //   { ok, extension, version[, logins: { google, accounts, chatgpt }][, opened][, closed] } or { error }
-// --session: a run starts; the tabs of the Product Review group are closed first (not while another tool's job runs).
-// --open: that page in Chrome, in the Product Review tab group (by the extension); without the extension, a plain new tab.
+// --session: a run starts; the tabs of the Product Video group are closed first (not while another tool's job runs).
+// --open: that page in Chrome, in the Product Video tab group (by the extension); without the extension, a plain new tab.
 // The bridge is installed (npm, its one package ws) and started when missing, started again after Cập nhật changed
 // server.mjs, and runs detached with no output of its own (a pipe of whoever started it would close: EPIPE). Without
 // the extension connected, the user's Chrome is started (--no-open: not; Cấu hình only checks) and waited for; an
@@ -15,8 +15,8 @@ import { findTool, onWindows, openChrome, runTool, toolEnv } from "../platform.m
 
 const here = dirname(fileURLToPath(import.meta.url));
 const server = join(here, "server.mjs");
-const BRIDGE = `http://127.0.0.1:${Number(process.env.BRIDGE_PORT || 8775)}`;
-const NO_EXTENSION = `Chưa thấy extension Product Review trong Chrome. Cài một lần: mở chrome://extensions, bật Chế độ nhà phát triển, bấm Tải tiện ích đã giải nén, chọn thư mục ${join(here, "..", "extension")}.`;
+const BRIDGE = `http://127.0.0.1:${Number(process.env.BRIDGE_PORT || 8785)}`;
+const NO_EXTENSION = `Chưa thấy extension Product Video trong Chrome. Cài một lần: mở chrome://extensions, bật Chế độ nhà phát triển, bấm Tải tiện ích đã giải nén, chọn thư mục ${join(here, "..", "extension")}.`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const get = (path, method = "GET", body) => fetch(BRIDGE + path, { method, body: body && JSON.stringify(body), signal: AbortSignal.timeout(["/logins", "/open", "/session"].includes(path) ? 25000 : 3000) }).then((r) => r.json()).catch(() => null);
 const until = async (test, ms) => { for (const end = Date.now() + ms; Date.now() < end; await sleep(500)) { const s = await get("/status"); if (test(s)) return s; } return get("/status"); };
@@ -41,7 +41,7 @@ async function main(args) {
     status = await until((s) => !s, 5000);
     if (status && status.pid) { try { process.kill(status.pid); } catch {} status = await until((s) => !s, 5000); }
     if (status && !onWindows) { execFile("pkill", ["-f", "bridge/server.mjs"]); status = await until((s) => !s, 5000); }
-    if (status) return { error: "Bridge cũ vẫn chạy ở cổng 8775. Khởi động lại máy rồi chạy lại." };
+    if (status) return { error: "Bridge cũ vẫn chạy ở cổng 8785. Khởi động lại máy rồi chạy lại." };
   }
   if (!status) {
     spawn(process.execPath, [server], { cwd: here, detached: true, stdio: "ignore", windowsHide: true }).unref();

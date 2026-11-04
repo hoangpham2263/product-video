@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grok Video</title>
-<link rel="icon" href="../icon.svg">
-<link rel="stylesheet" href="../../../hub/assets/tool.css">
-<script src="../../../hub/assets/hub.js" defer></script>
+<title>Product Video</title>
+<link rel="icon" href="/icon.svg">
+<link rel="stylesheet" href="/core/assets/tool.css">
+<script src="/core/assets/hub.js" defer></script>
 <style>
 /* Fits the window: photos, scenes and settings on the left, the run (frames, clips, the video) on the right. */
 body { height: 100vh; overflow: hidden; }
@@ -23,6 +23,14 @@ main { height: 100%; display: flex; flex-direction: column; }
 .photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .photo .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; padding: 0; z-index: 1; }
 .photo b { color: var(--ink); font-weight: 400; display: block; margin-bottom: 4px; }
+.photo .lib { position: absolute; left: 6px; bottom: 6px; height: 26px; padding: 0 10px; z-index: 1; }
+/* Kho ảnh: a danh mục, then its photos as a grid of thumbnails. */
+.dialog.library { width: min(760px, calc(100vw - 32px)); }
+.library .top { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.library .grid { height: 380px; overflow-y: auto; background: #fff; border: 1px solid var(--line); padding: 6px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; }
+.library .grid img { width: 104px; height: 104px; object-fit: contain; background: var(--control); border: 2px solid transparent; cursor: pointer; }
+.library .grid img:hover { border-color: var(--accent); }
+.library .note { margin-top: 8px; min-height: 18px; }
 #scenes { flex: 1; min-height: 120px; padding: 6px; gap: 4px; }
 .scene { display: grid; grid-template-columns: 26px minmax(0, 1fr) 34px 30px 30px 30px; gap: 6px; align-items: center; height: 36px; padding: 0 6px 0 10px; background: #fff; border: 1px solid var(--line); }
 .scene .btn { height: 28px; padding: 0; }
@@ -48,7 +56,7 @@ main { height: 100%; display: flex; flex-direction: column; }
 </head>
 <body data-fit="1100x760">
 <main>
-  <header><a class="btn" id="menu" href="/" hidden>← Menu</a><h1>Grok Video</h1></header>
+  <header><h1>Product Video</h1></header>
 
   <div class="page" id="make">
     <div class="layout">
@@ -81,7 +89,7 @@ main { height: 100%; display: flex; flex-direction: column; }
         <section class="group actions-col">
           <h2>Thao tác</h2>
           <div class="buttons"><button class="btn primary" id="run" type="button">Tạo video</button><button class="btn" id="stop" type="button" disabled>Dừng</button><button class="btn" id="open" type="button" disabled>Mở thư mục</button></div>
-          <div class="note small" style="margin-top:8px">Chạy trong Chrome đã đăng nhập grok.com, qua extension Tools Hub. Mỗi cảnh: 1 ảnh Grok (~10 giây) và 1 video Grok (~1 phút).</div>
+          <div class="note small" style="margin-top:8px">Chạy trong Chrome đã đăng nhập grok.com, qua extension Product Video. Mỗi cảnh: 1 ảnh Grok (~10 giây) và 1 video Grok (~1 phút).</div>
         </section>
         <section class="group grow">
           <h2>Tiến độ <span class="muted small" id="status"></span></h2>
@@ -100,9 +108,7 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 function toast(text) { const t = $("toast"); t.textContent = text; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
-// Opened from the Tools Hub menu: a button back to it (?hub=<port>). The page is served by src/server.mjs.
-const hubPort = new URLSearchParams(location.search).get("hub");
-if (hubPort) { $("menu").href = `http://127.0.0.1:${hubPort}/`; $("menu").hidden = false; }
+// The page is served by src/server.mjs.
 window.addEventListener("error", (e) => fetch("/api/client-error", { method: "POST", body: JSON.stringify({ message: e.message, stack: e.error?.stack || "" }) }).catch(() => {}));
 
 // This page only collects the job and follows the run; the work is src/run-video.ps1, started by src/server.mjs, whose
@@ -117,6 +123,8 @@ const persist = () => store.set(KEY, make);
 const angleOf = (id) => DATA.angles.find((a) => a.id === id);
 
 const BOXES = [["photoBox", "photo", "Ảnh sản phẩm", "Bấm, kéo ảnh vào, hoặc rê chuột vào đây rồi Ctrl+V"], ["modelBox", "model", "Người mẫu (tuỳ chọn)", "Mở đầu video bằng người mẫu giới thiệu sản phẩm. Bấm, kéo ảnh vào hoặc Ctrl+V"]];
+// Each box also picks from its own part of the library (product-video-sources): products or models.
+const LIBRARY_KIND = { photo: "products", model: "models" };
 function renderPhotos() {
   for (const [box, key, title, hint] of BOXES) {
     const node = $(box);
@@ -126,7 +134,45 @@ function renderPhotos() {
       x.onclick = (e) => { e.stopPropagation(); make[key] = ""; persist(); renderPhotos(); renderScenes(); };
       node.append(el("img", { src: fileUrl(make[key]), alt: title }), x);
     } else node.append(Object.assign(el("span"), { innerHTML: `<b>${title}</b>${hint}` }));
+    const lib = el("button", { className: "btn lib", type: "button", textContent: "Từ kho" });
+    lib.onclick = (e) => { e.stopPropagation(); pickFromLibrary(key, title); };
+    node.append(lib);
   }
+}
+
+// Kho ảnh: the danh mục of this box's kind, then a click on a photo downloads it (once) and fills the box.
+async function pickFromLibrary(key, title) {
+  const shade = el("div", { className: "shade" });
+  shade.innerHTML = `<div class="dialog library" role="dialog"><div class="top"><b>${title} từ kho</b><select></select></div><div class="grid"></div><div class="note small muted">Đang tải danh sách…</div><div class="actions"><button class="btn" type="button">Đóng</button></div></div>`;
+  document.body.append(shade);
+  const [select, grid, note, close] = ["select", ".grid", ".note", ".actions .btn"].map((s) => shade.querySelector(s));
+  close.onclick = () => shade.remove();
+  shade.onclick = (e) => { if (e.target === shade) shade.remove(); };
+  const kind = LIBRARY_KIND[key];
+  const r = await fetch(`/api/library?kind=${kind}`).then((x) => x.json()).catch(() => ({ groups: [], error: "Không kết nối được kho ảnh." }));
+  const groups = [].concat(r.groups || []);
+  if (!groups.length) { note.textContent = r.error || "Kho chưa có ảnh nào."; select.hidden = true; return; }
+  select.replaceChildren(...groups.map((g, i) => el("option", { value: String(i), textContent: `${g.name} (${g.files.length})` })));
+  const saved = store.get(`library:${kind}`, "");
+  select.value = String(Math.max(0, groups.findIndex((g) => g.name === saved)));
+  const show = () => {
+    const group = groups[Number(select.value)];
+    store.set(`library:${kind}`, group.name);
+    note.textContent = group.files.length ? "Bấm vào ảnh để chọn." : "Danh mục này chưa có ảnh.";
+    grid.replaceChildren(...group.files.map((f) => {
+      const img = el("img", { src: f.local ? fileUrl(f.local) : f.url, alt: f.name, title: f.name, loading: "lazy", decoding: "async" });
+      img.onclick = async () => {
+        note.textContent = "Đang tải ảnh…";
+        const res = await fetch("/api/library/pick", { method: "POST", body: JSON.stringify({ kind, group: group.name, name: f.name }) }).catch(() => null);
+        const body = res && (await res.json().catch(() => ({})));
+        if (!res?.ok) { note.textContent = body?.error || "Chưa tải được ảnh."; return; }
+        make[key] = body.path; persist(); renderPhotos(); renderScenes(); shade.remove();
+      };
+      return img;
+    }));
+  };
+  select.onchange = show;
+  show();
 }
 let pickFor = "photo";
 async function upload(file, key) {
@@ -282,7 +328,7 @@ $("run").onclick = async () => {
   Object.assign(run, { since: 0, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], total: make.scenes.length });
   const r = await fetch("/api/run", { method: "POST", body: JSON.stringify(job) }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));
-  if (!r?.ok) return toast(body?.error || "Không bắt đầu được. Mở Grok Video từ Tools Hub.");
+  if (!r?.ok) return toast(body?.error || "Không bắt đầu được. Đóng và mở lại Product Video.");
   run.running = true; renderRun(); poll();
 };
 $("stop").onclick = async () => { await fetch("/api/stop", { method: "POST" }).catch(() => {}); toast("Đang dừng…"); };
@@ -301,7 +347,7 @@ fetch("/api/data").then((r) => r.json()).then((data) => {
     return group;
   }));
   renderPhotos(); renderSettings(); renderScenes(); renderRun(); poll();
-}, () => toast("Không đọc được dữ liệu. Mở Grok Video từ Tools Hub."));
+}, () => toast("Không đọc được dữ liệu. Đóng và mở lại Product Video."));
 
 </script>
 </body>

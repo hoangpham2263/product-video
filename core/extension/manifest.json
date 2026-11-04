@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Product Review",
-  "version": "1.0.12",
-  "description": "Cầu nối local của Product Review: nhận việc từ các tool (tạo ảnh, video, viết chữ), làm trong tab Google Flow, Gemini, ChatGPT, Grok đang đăng nhập và trả kết quả về máy.",
+  "name": "Product Video",
+  "version": "1.0.0",
+  "description": "Cầu nối local của Product Video: nhận việc từ các tool (tạo ảnh, video, viết chữ), làm trong tab Google Flow, Gemini, ChatGPT, Grok đang đăng nhập và trả kết quả về máy.",
   "background": {
     "service_worker": "background.js"
   },
@@ -78,7 +78,7 @@
     }
   ],
   "action": {
-    "default_title": "Product Review",
+    "default_title": "Product Video",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",

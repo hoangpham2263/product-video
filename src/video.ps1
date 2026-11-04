@@ -1,4 +1,4 @@
-﻿# Grok Video's run: one product photo becomes a video of about a minute that moves around the product in one take.
+﻿# Product Video's run: one product photo becomes a video of about a minute that moves around the product in one take.
 #   1. Key frames (Grok image): frame 0 is the photo rendered clean (or, with a model photo, the model presenting the
 #      product in the same room); frame i is the same room seen from scene i's camera angle (data/angles.json),
 #      only for the angles Grok's image edit does well (data/video.json keyframeAngles: close crops, high, overhead).
@@ -76,7 +76,7 @@ function Test-VideoJob($Job) {
 
 $script:VideoLight = 'Keep the time of day and the light direction of image 1, shaped like professional interior photography: soft diffused key light, open shadows, faithful wood color, no color cast. Premium photographed realism: clear grain, crisp edges, believable contact shadows; no CGI feel, HDR look, plastic gloss or sharpening halos. One image only: no collage, inset, split screen, text, logo or watermark.'
 
-# Frame i: the room of the product photo seen from one camera angle, the product unchanged (the hub's core rules,
+# Frame i: the room of the product photo seen from one camera angle, the product unchanged (the core rules,
 # profile content). The as-photo angle is frame 0 without a model: the photo itself, rendered clean and sharp.
 function New-FramePrompt([string]$ProductName, $Angle, [int]$Index, [int]$Total) {
     $moved = $Angle.id -ne 'as-photo'

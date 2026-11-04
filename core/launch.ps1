@@ -1,10 +1,10 @@
-﻿# Opens Product Review. macOS and Windows show the same web page from the same Node server (src/mac/server.mjs):
+﻿# Opens Product Video. macOS and Windows show the same web page from the same Node server (src/server.mjs):
 # start-app.command gets the entry to start printed (-Mac); on Windows this script starts it and shows it in one app
 # window (WinForms with WebView2, core/webview2): no browser or address bar.
 param([switch]$Mac)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$entry = [IO.Path]::GetFullPath((Join-Path $root 'src/mac/server.mjs'))
+$entry = [IO.Path]::GetFullPath((Join-Path $root 'src/server.mjs'))
 if ($Mac) { return $entry }
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -12,9 +12,9 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $logs = Join-Path $root 'workspace/logs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 function Write-HubError([string]$Text) {
-    try { Add-Content -LiteralPath (Join-Path $logs 'app-errors.log') -Encoding UTF8 -Value ("[{0:o}] Product Review`r`n  {1}`r`n" -f (Get-Date), $Text) } catch { }
+    try { Add-Content -LiteralPath (Join-Path $logs 'app-errors.log') -Encoding UTF8 -Value ("[{0:o}] Product Video`r`n  {1}`r`n" -f (Get-Date), $Text) } catch { }
 }
-function Show-HubMessage([string]$Text) { [void][Windows.Forms.MessageBox]::Show($Text, 'Product Review', 'OK', 'Warning') }
+function Show-HubMessage([string]$Text) { [void][Windows.Forms.MessageBox]::Show($Text, 'Product Video', 'OK', 'Warning') }
 
 # Node runs the pages' servers; without it, the installer from Cấu hình (Node.js, Codex, sign-in) runs first.
 function Find-Node {
@@ -23,21 +23,21 @@ function Find-Node {
 }
 $node = Find-Node
 if (-not $node) {
-    if ([Windows.Forms.MessageBox]::Show("Product Review cần Node.js. Cài ngay?`r`n`r`nCửa sổ cài đặt sẽ mở; cài xong Product Review tự mở.", 'Product Review', 'OKCancel', 'Information') -ne 'OK') { return }
+    if ([Windows.Forms.MessageBox]::Show("Product Video cần Node.js. Cài ngay?`r`n`r`nCửa sổ cài đặt sẽ mở; cài xong Product Video tự mở.", 'Product Video', 'OKCancel', 'Information') -ne 'OK') { return }
     Start-Process powershell.exe -Wait -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'setup/setup-install.ps1') + '"'))
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
     $node = Find-Node
-    if (-not $node) { Show-HubMessage 'Chưa cài được Node.js. Mở Product Review lại để thử lần nữa.'; return }
+    if (-not $node) { Show-HubMessage 'Chưa cài được Node.js. Mở Product Video lại để thử lần nữa.'; return }
 }
 
-# The server's port, the one Node would pick for this folder (BASE_PORT in src/mac/server.mjs), handed to it so the
+# The server's port, the one Node would pick for this folder (BASE_PORT in src/server.mjs), handed to it so the
 # two never disagree.
 function Get-HubPort([string]$Dir, [int]$Base) {
     $sha = [Security.Cryptography.SHA1]::Create()
     try { $hex = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Dir)) | ForEach-Object { $_.ToString('x2') }) } finally { $sha.Dispose() }
     return $Base + ([Convert]::ToInt32($hex.Substring(0, 6), 16) % 1000)
 }
-$serverService = 'product-review'
+$serverService = 'product-video'
 $serverRoot = $root; $port = Get-HubPort $root 47000
 $serverLogs = $logs; $arguments = @(('"' + $entry + '"'), '--no-open')
 . (Join-Path $PSScriptRoot 'server-health.ps1')
@@ -46,7 +46,7 @@ $addressFile = Join-Path $logs '../server-address.json'
 $serverReady = $false
 for ($attempt = 0; $attempt -lt 3 -and -not $serverReady; $attempt++) {
     $port = Select-HubServerPort $basePort $addressFile
-    $env:PR_PORT = [string]$port
+    $env:GV_PORT = [string]$port
     if (Test-HubServer) { $serverReady = $true; break }
     New-Item -ItemType Directory -Force -Path $serverLogs | Out-Null
     $out = Join-Path $serverLogs "server-$port.log"; $err = Join-Path $serverLogs "server-$port.err.log"
@@ -67,7 +67,7 @@ for ($attempt = 0; $attempt -lt 3 -and -not $serverReady; $attempt++) {
     }
     if (-not $serverReady) { Write-HubError "Server did not start: $entry (port $port); log: $err"; $basePort = $port + 1 }
 }
-if (-not $serverReady) { Show-HubMessage 'Không mở được Product Review. Xem workspace/logs/app-errors.log để biết tiến trình/cổng lỗi.'; return }
+if (-not $serverReady) { Show-HubMessage 'Không mở được Product Video. Xem workspace/logs/app-errors.log để biết tiến trình/cổng lỗi.'; return }
 $addressTemp = "$addressFile.$PID.tmp"
 @{root=$serverRoot;service=$serverService;port=$port} | ConvertTo-Json -Compress | Set-Content -LiteralPath $addressTemp -Encoding UTF8
 Move-Item -LiteralPath $addressTemp -Destination $addressFile -Force
@@ -101,7 +101,7 @@ try {
     return
 }
 
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Product Review'; Size = '1120,840'; MinimumSize = '640,480'; StartPosition = 'CenterScreen'; BackColor = [Drawing.Color]::FromArgb(240, 240, 240) }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Product Video'; Size = '1120,840'; MinimumSize = '640,480'; StartPosition = 'CenterScreen'; BackColor = [Drawing.Color]::FromArgb(240, 240, 240) }
 $hubIcon = Join-Path $root 'icon.png'
 # Read into memory, so the file stays free for Cập nhật to replace while the window is open.
 if (Test-Path -LiteralPath $hubIcon) { $form.Icon = [Drawing.Icon]::FromHandle((New-Object Drawing.Bitmap((New-Object IO.MemoryStream(, [IO.File]::ReadAllBytes($hubIcon))))).GetHicon()) }
@@ -130,7 +130,7 @@ $form.Add_FormClosing({
         param($source, $closing)
         try {
             $run = (New-Object Net.WebClient).DownloadString("http://127.0.0.1:$(([Uri]$webView.Source).Port)/api/run") | ConvertFrom-Json
-            if ($run.running -and [Windows.Forms.MessageBox]::Show($form, 'Đang chạy. Đóng cửa sổ sẽ dừng lượt chạy này. Vẫn đóng?', 'Product Review', 'YesNo', 'Warning') -ne 'Yes') { $closing.Cancel = $true }
+            if ($run.running -and [Windows.Forms.MessageBox]::Show($form, 'Đang chạy. Đóng cửa sổ sẽ dừng lượt chạy này. Vẫn đóng?', 'Product Video', 'YesNo', 'Warning') -ne 'Yes') { $closing.Cancel = $true }
         } catch { }
     })
 $form.Add_FormClosed({ try { [void](New-Object Net.WebClient).UploadString("http://127.0.0.1:$port/api/quit", '') } catch { } })

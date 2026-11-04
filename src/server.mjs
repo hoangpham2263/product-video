@@ -1,6 +1,6 @@
-// Grok Video's window (ui/) served on localhost, on macOS and Windows alike, and the run it starts (src/run-video.ps1).
-// The Tools Hub menu starts this file (tool.json "mac") with --no-open and finds it by /api/root; each install gets its
-// own port from its folder, as Content MXH does. The run prints @@EVENT lines; they become the events the window polls.
+// Product Video's window (ui/) served on localhost, on macOS and Windows alike, and the run it starts (src/run-video.ps1).
+// core/launch.ps1 starts this file with --no-open and finds it by /api/root; each install gets its own port from its
+// folder. The run prints @@EVENT lines; they become the events the window polls.
 import { createServer } from "node:http";
 import { spawn, execFile } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -9,18 +9,19 @@ import { createReadStream, existsSync, mkdirSync, openSync, readFileSync, statSy
 import { join, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
-import { createConfigApi } from "../../../hub/setup/config-api.mjs";
-import { PWSH, toolEnv, psFile, psCommand, killTree, appWindow, onWindows } from "../../../hub/platform.mjs";
+import { createConfigApi } from "../core/setup/config-api.mjs";
+import { PWSH, toolEnv, psFile, psCommand, killTree, appWindow, onWindows } from "../core/platform.mjs";
+import { createLibrary } from "./library.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
-const hubRoot = resolve(root, "..", "..");
 const BASE_PORT = Number(process.env.GV_PORT || 47000 + (parseInt(createHash("sha1").update(root).digest("hex").slice(0, 6), 16) % 1000));
 let PORT = BASE_PORT;
 const workspace = join(root, "workspace");
 const logs = join(workspace, "logs");
 const uploads = join(workspace, "temp", "uploads");
-const configApi = createConfigApi({ hubRoot, pwsh: PWSH, env: toolEnv });
+const configApi = createConfigApi({ hubRoot: root, pwsh: PWSH, env: toolEnv });
+const library = createLibrary({ workspace });
 mkdirSync(logs, { recursive: true });
 
 const logFile = (name) => {
@@ -31,13 +32,13 @@ const logFile = (name) => {
 const logError = (where, text) => {
   try { appendFileSync(logFile("app-errors.log"), `[${new Date().toISOString()}] ${where}\n  ${String(text).trim().replace(/\n/g, "\n  ")}\n\n`); } catch {}
 };
-process.on("uncaughtException", (e) => { logError("Máy chủ Grok Video", e.stack || e); process.exit(1); });
-process.on("unhandledRejection", (e) => logError("Máy chủ Grok Video", e?.stack || e));
+process.on("uncaughtException", (e) => { logError("Máy chủ Product Video", e.stack || e); process.exit(1); });
+process.on("unhandledRejection", (e) => logError("Máy chủ Product Video", e?.stack || e));
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4" };
 const IMAGE_EXT = [".png", ".jpg", ".jpeg", ".webp"];
 const SERVED_EXT = [...IMAGE_EXT, ".mp4"];
-const HUB_ASSETS = ["icon.svg", "tool.css", "hub.js"];
+const CORE_ASSETS = ["tool.css", "hub.js"];
 
 const readJson = async (file) => JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
 async function pageData() {
@@ -119,9 +120,9 @@ const sendFile = (req, res, file) => {
 };
 // Only what this tool wrote (its uploads and results) is served back to the window.
 const allowedFile = (p) => { const full = resolve(p); return full.startsWith(workspace + sep) && SERVED_EXT.includes(extname(full).toLowerCase()); };
-const version = () => { try { return readFileSync(join(hubRoot, "workspace", "version.txt"), "utf8").trim(); } catch { return ""; } };
+const version = () => { try { return readFileSync(join(root, "workspace", "version.txt"), "utf8").trim(); } catch { return ""; } };
 const q = (p) => p.replace(/'/g, "''");
-const pwshOut = (command, timeout) => new Promise((done, fail) => execFile(PWSH, psCommand(command), { cwd: hubRoot, env: toolEnv, timeout, windowsHide: true }, (err, out) => (err ? fail(err) : done(String(out).trim()))));
+const pwshOut = (command, timeout) => new Promise((done, fail) => execFile(PWSH, psCommand(command), { cwd: root, env: toolEnv, timeout, windowsHide: true }, (err, out) => (err ? fail(err) : done(String(out).trim()))));
 
 function restart() {
   const out = openSync(logFile("server.log"), "a");
@@ -132,11 +133,11 @@ function restart() {
 async function handle(req, res) {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
-  if (path === "/api/root") return send(res, 200, { root, service: "grok-video", protocol: 1, version: version(), pid: process.pid });
+  if (path === "/api/root") return send(res, 200, { root, service: "product-video", protocol: 1, version: version(), pid: process.pid });
   if (path === "/api/data") return send(res, 200, await pageData());
   if (path === "/api/client-error" && req.method === "POST") {
     const { message = "", stack = "" } = JSON.parse((await body(req)).toString("utf8") || "{}");
-    logError("Giao diện Grok Video", [message, stack].filter(Boolean).join("\n").slice(0, 4000));
+    logError("Giao diện Product Video", [message, stack].filter(Boolean).join("\n").slice(0, 4000));
     return send(res, 200, { ok: true });
   }
   if (path === "/api/upload" && req.method === "POST") {
@@ -168,16 +169,18 @@ async function handle(req, res) {
     const file = url.searchParams.get("path") || "";
     return allowedFile(file) ? sendFile(req, res, resolve(file)) : (res.writeHead(404), res.end());
   }
-  // The hub's own buttons (Cập nhật, Cấu hình, Tải lại) work against this server too, as on the menu.
+  // Kho ảnh: the groups of product-video-sources, and a picked photo saved for the run.
+  if (await library(req, res, path, url)) return;
+  // Cập nhật, Cấu hình, Tải lại (core/assets/hub.js).
   if (await configApi(req, res, path)) return;
   if (path === "/api/update-check") {
-    const out = await pwshOut(`. '${q(join(hubRoot, "hub", "update.ps1"))}' -NoRun; [pscustomobject]@{ current = (Get-InstalledVersion '${q(hubRoot)}'); next = (Get-AppUpdate '${q(hubRoot)}') } | ConvertTo-Json -Compress`, 60000).catch(() => "");
+    const out = await pwshOut(`. '${q(join(root, "core", "update.ps1"))}' -NoRun; [pscustomobject]@{ current = (Get-InstalledVersion '${q(root)}'); next = (Get-AppUpdate '${q(root)}') } | ConvertTo-Json -Compress`, 60000).catch(() => "");
     res.writeHead(out ? 200 : 502, { "content-type": TYPES[".json"] });
     return res.end(out || "{}");
   }
   if (path === "/api/update" && req.method === "POST") {
     if (run.proc) return send(res, 409, { error: "Đang chạy. Dừng hoặc chờ xong rồi cập nhật." });
-    const ok = await pwshOut(`. '${q(join(hubRoot, "hub", "update.ps1"))}' -NoRun; Update-App '${q(hubRoot)}'`, 300000).then(() => true, () => false);
+    const ok = await pwshOut(`. '${q(join(root, "core", "update.ps1"))}' -NoRun; Update-App '${q(root)}'`, 300000).then(() => true, () => false);
     send(res, ok ? 200 : 500, { ok });
     if (ok) setTimeout(() => { server.close(); restart(); }, 300);
     return;
@@ -190,8 +193,8 @@ async function handle(req, res) {
   }
   if (path === "/api/quit" && req.method === "POST") { send(res, 200, { ok: true }); stopRun(); setTimeout(() => process.exit(0), 200); return; }
   if (path === "/icon.svg") return sendFile(req, res, join(root, "icon.svg"));
-  const hubAsset = /^\/hub\/assets\/([\w.-]+)$/.exec(path);
-  if (hubAsset) return HUB_ASSETS.includes(hubAsset[1]) ? sendFile(req, res, join(hubRoot, "hub", "assets", hubAsset[1])) : (res.writeHead(404), res.end());
+  const asset = /^\/core\/assets\/([\w.-]+)$/.exec(path);
+  if (asset) return CORE_ASSETS.includes(asset[1]) ? sendFile(req, res, join(root, "core", "assets", asset[1])) : (res.writeHead(404), res.end());
   const rel = path === "/" ? "index.html" : path.slice(1);
   const file = resolve(root, "ui", rel);
   if (!file.startsWith(resolve(root, "ui") + sep)) { res.writeHead(404); return res.end(); }

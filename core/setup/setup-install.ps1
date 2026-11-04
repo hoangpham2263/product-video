@@ -1,5 +1,5 @@
-﻿# Install on Windows, run from the Cài button in the Cấu hình window: Node.js, Codex CLI, ChatGPT sign-in and the
-# bridge (core/bridge), each only when missing, then the same readiness check as Cấu hình.
+﻿# Install on Windows (core/launch.ps1 when Node.js is missing): Node.js and the bridge (core/bridge), each only when
+# missing, then the same readiness check as Cấu hình.
 $ErrorActionPreference = 'Continue'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -31,15 +31,6 @@ if (-not (Test-Tool node)) {
     }
 }
 Write-Host "Node.js $(node --version)"
-
-Step 'Codex'
-if (-not (Test-Tool codex)) { npm install -g @openai/codex; Update-SessionPath }
-if (-not (Test-Tool codex)) { Write-Host 'Chưa cài được Codex. Bấm Cài lại để thử tiếp.' -ForegroundColor Yellow; Read-Host 'Nhấn Enter để đóng'; exit 1 }
-Write-Host (codex --version)
-
-Step 'Đăng nhập ChatGPT'
-$status = (& codex login status 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0 -or $status -notmatch '(?i)logged in') { codex login } else { Write-Host 'Đã đăng nhập.' }
 
 Step 'Cầu nối trình duyệt'
 foreach ($bridge in @(Join-Path $root 'core/bridge')) {

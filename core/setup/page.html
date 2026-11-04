@@ -26,7 +26,7 @@
 .ai-model > span { grid-column: 1 / -1; }
 header .again { margin-left: auto; }
 /* Tài khoản AI: the AIs side by side in one row, each a short card (name, account, state, buttons). */
-#ai { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ai { grid-template-columns: minmax(0, 1fr); }
 #ai .item { grid-template-columns: 22px minmax(0, 1fr); align-content: start; }
 #ai .item .side { grid-column: 2; flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
 #ai .item .side .btn { min-width: 0; height: 28px; padding: 0 10px; }
@@ -49,12 +49,9 @@ header .again { margin-left: auto; }
 <main>
   <header><button class="btn back" type="button">← Quay lại</button><h1>Cấu hình</h1><button class="btn again" type="button">Kiểm tra lại</button></header>
   <div class="layout setup-page">
-    <section class="group wide"><h2>Tài khoản AI</h2><div class="note-line">Mỗi AI đăng nhập riêng, có thể là tài khoản khác nhau. Đổi tài khoản ngay ở đây hoặc mở trang web của AI để đăng nhập.</div><div class="items" id="ai"></div></section>
+    <section class="group wide"><h2>Tài khoản AI</h2><div class="note-line">Grok chạy trong Chrome của máy, bằng tài khoản đang đăng nhập grok.com.</div><div class="items" id="ai"></div></section>
     <section class="group"><h2>Cài đặt</h2><div class="items" id="base"></div></section>
-    <section class="group"><h2>Model AI của Codex</h2>
-      <div class="ai-model"><span class="muted">Model nhẹ, mức thấp tốn ít token hơn.</span><select class="model"></select><select class="effort"></select></div>
-    </section>
-    <section class="group wide"><h2>Lượt dùng AI</h2><div class="note-line">Mọi lần gọi AI của các tool trên máy này, theo từng tài khoản. Gemini, Flow, ChatGPT không cho biết hạn mức: lỗi Hết lượt mà sau đó chưa chạy được lần nào thì tài khoản đó đang hết lượt.</div><div class="usage-wrap"><table class="usage"><thead><tr><th>AI · tài khoản</th><th>Hôm nay</th><th>7 ngày</th><th>30 ngày</th><th>Lỗi gần nhất</th></tr></thead><tbody id="usage"><tr><td colspan="5" class="sub">Đang đọc…</td></tr></tbody></table></div></section>
+    <section class="group wide"><h2>Lượt dùng AI</h2><div class="note-line">Mọi lần gọi Grok trên máy này. Grok không cho biết hạn mức: lỗi Hết lượt mà sau đó chưa chạy được lần nào thì tài khoản đang hết lượt.</div><div class="usage-wrap"><table class="usage"><thead><tr><th>AI · tài khoản</th><th>Hôm nay</th><th>7 ngày</th><th>30 ngày</th><th>Lỗi gần nhất</th></tr></thead><tbody id="usage"><tr><td colspan="5" class="sub">Đang đọc…</td></tr></tbody></table></div></section>
   </div>
 </main>
 </body>

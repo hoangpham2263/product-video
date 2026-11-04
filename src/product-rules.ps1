@@ -1,4 +1,4 @@
-﻿# Core rules for how the product must look in an edited photo (Grok Video frames). Rule 5 (FIT) says how the photo itself is rendered; what the
+﻿# Core rules for how the product must look in an edited photo (Product Video frames). Rule 5 (FIT) says how the photo itself is rendered; what the
 # product looks like (rules 1-4, 6, 7) must not change. The frames are rendered clean and sharp.
 function Get-VideoProductRules([int]$ProductIndex) {
     $fit = "5. FIT: place it at true scale with the light direction, contact shadows and occlusion of the photo, seen from the camera angle the task asks for. Feet touch the floor (sinking slightly into a rug). Render the whole photo clean and sharp with natural fine detail, free of halos, harsh sharpening, HDR and plastic gloss."

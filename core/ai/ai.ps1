@@ -2,7 +2,7 @@
 # The app dot-sources this file (from src: ../core/ai/ai.ps1) and keeps only its own prompts and
 # choices. A new AI is one entry in $script:HubAIProviders plus its provider file in providers/:
 #   cli      a command on this machine (codex, agy)
-#   browser  a site in the user's own Chrome, through core/bridge and the Product Review extension (core/extension/sites/)
+#   browser  a site in the user's own Chrome, through core/bridge and the Product Video extension (core/extension/sites/)
 # Errors end in [CAUSE:<kind>] (AUTH, QUOTA, BUSY, NETWORK, AI_TIMEOUT, BRIDGE, ...), which tools show and retry by.
 . (Join-Path $PSScriptRoot 'common.ps1')
 . (Join-Path $PSScriptRoot 'providers/codex.ps1')

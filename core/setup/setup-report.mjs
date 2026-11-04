@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdirSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const required = ['node', 'codex', 'login', 'quota'];
+const required = ['node', 'browser', 'grok'];
 export function parseSetupReport(stdout) {
   const report = JSON.parse(String(stdout).replace(/^\uFEFF/, '').trim());
   if (!Array.isArray(report.Steps) || required.some(id => !report.Steps.some(s => s.Id === id))) throw new Error('Incomplete setup report');

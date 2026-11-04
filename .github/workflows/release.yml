@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # One fixed asset name, so releases/latest/download/product-review.zip always works.
+      # One fixed asset name, so releases/latest/download/product-video.zip always works.
       - run: |
-          git archive --format=zip --prefix=product-review/ -o product-review.zip "$GITHUB_REF_NAME"
-          gh release create "$GITHUB_REF_NAME" product-review.zip --generate-notes --title "$GITHUB_REF_NAME"
+          git archive --format=zip --prefix=product-video/ -o product-video.zip "$GITHUB_REF_NAME"
+          gh release create "$GITHUB_REF_NAME" product-video.zip --generate-notes --title "$GITHUB_REF_NAME"
         env:
           GH_TOKEN: ${{ github.token }}
