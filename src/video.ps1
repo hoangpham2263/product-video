@@ -32,7 +32,8 @@ function Format-Seconds([double]$Value) { $Value.ToString('0.###', $script:Invar
 
 function Get-VideoSettings { Read-JsonFile (Join-Path (Get-ToolRoot) 'data/video.json') }
 
-# The job the window sends, checked: { product, photo, model, reference, resolution }.
+# The job the window sends, checked: { product, photo, model, reference, length, resolution }. Length: seconds of the
+# video (one of data/video.json lengths), 0 for as long as the sample.
 function Test-VideoJob($Job) {
     $settings = Get-VideoSettings
     if (-not ([string]$Job.product).Trim()) { throw 'Điền tên sản phẩm.' }
@@ -40,9 +41,11 @@ function Test-VideoJob($Job) {
     if ($Job.model -and -not (Test-Path -LiteralPath ([string]$Job.model) -PathType Leaf)) { throw 'Không thấy ảnh người mẫu.' }
     if (-not $Job.reference -or -not (Test-Path -LiteralPath ([string]$Job.reference) -PathType Leaf)) { throw 'Chưa chọn video mẫu.' }
     if (@($settings.resolutions) -notcontains [string]$Job.resolution) { throw "Độ phân giải không hỗ trợ: $($Job.resolution)." }
+    $length = [int]$Job.length
+    if ($length -and @($settings.lengths) -notcontains $length) { throw "Độ dài video $(@($settings.lengths) -join ', ') giây, không phải $length." }
     [pscustomobject]@{
         Product = ([string]$Job.product).Trim(); Photo = [string]$Job.photo; Model = [string]$Job.model
-        Reference = [string]$Job.reference; Resolution = [string]$Job.resolution; Settings = $settings
+        Reference = [string]$Job.reference; Length = $length; Resolution = [string]$Job.resolution; Settings = $settings
     }
 }
 
@@ -59,10 +62,12 @@ function Get-ReferenceCuts([string]$Video, [double]$Threshold) {
 }
 
 # The parts Grok makes: shots (between cuts; one shorter than minShot joins the shot before), each split into equal
-# parts of at most the longest Grok clip. Only the first maxSeconds of the sample are used.
-#   { Shot, Start, End, Seconds, GrokSeconds, Continues }
-function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings) {
+# parts of at most the longest Grok clip. Only the first maxSeconds of the sample are used. $Length (seconds, 0: as
+# the sample) stretches every shot alike: the same moves and cuts, the camera slower.
+#   { Shot, Start, End (in the sample), Seconds (in the video), GrokSeconds, Continues }
+function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings, [double]$Length = 0) {
     $end = [Math]::Min($Duration, [double]$Settings.maxSeconds)
+    $stretch = if ($Length -gt 0) { $Length / $end } else { 1 }
     $bounds = @(0.0)
     foreach ($cut in ($Cuts | Sort-Object)) {
         if ($cut - $bounds[-1] -ge [double]$Settings.minShot -and $end - $cut -ge [double]$Settings.minShot) { $bounds += $cut }
@@ -72,13 +77,14 @@ function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings) {
     $longest = $lengths[-1]
     $parts = @()
     for ($s = 0; $s -lt $bounds.Count - 1; $s++) {
-        $length = $bounds[$s + 1] - $bounds[$s]
+        $source = $bounds[$s + 1] - $bounds[$s]
+        $length = $source * $stretch
         $count = [Math]::Ceiling($length / $longest - 0.001)
         for ($p = 0; $p -lt $count; $p++) {
             $seconds = $length / $count
             $grok = $lengths | Where-Object { $_ -ge $seconds - 0.05 } | Select-Object -First 1
             $parts += [pscustomobject]@{
-                Shot = $s + 1; Start = $bounds[$s] + $p * $seconds; End = $bounds[$s] + ($p + 1) * $seconds
+                Shot = $s + 1; Start = $bounds[$s] + $p * $source / $count; End = $bounds[$s] + ($p + 1) * $source / $count
                 Seconds = $seconds; GrokSeconds = $(if ($grok) { $grok } else { $longest }); Continues = $p -gt 0
             }
         }
@@ -102,27 +108,34 @@ function Get-ReferenceMove($Motion, [double]$Start, [double]$End) {
     $out | ConvertFrom-Json
 }
 
-# A measured move in words: English for Grok, Vietnamese for the window. The picture sliding one way means the camera
-# went the other; growing means it pushed in.
-function ConvertTo-MoveText($Move) {
+# A measured move in words, with how far it goes: English for Grok, Vietnamese for the window. The picture sliding one
+# way means the camera went the other; growing means it pushed in. Each phase is capped (maxZoom, maxPan): tried
+# 04/11/2026, a sample walking into the next room (push-in x3) told only as "clearly pushes in" sent Grok around the
+# table, into a room of its own, and the table changed shape.
+function ConvertTo-MoveText($Move, $Settings) {
     $en = @(); $vi = @()
-    $x = [double]$Move.panX; $y = [double]$Move.panY; $z = [double]$Move.zoom
-    $amount = { param($v, $low, $high) if ($v -ge $high) { 'clearly' } elseif ($v -ge $low) { 'gently' } else { '' } }
-    if ($z -ge 1.04) { $how = & $amount ($z - 1) 0.04 0.4; $en += "the camera $how pushes in toward the product (dolly forward)"; $vi += 'đẩy vào' }
-    elseif ($z -le 0.96) { $how = & $amount (1 / $z - 1) 0.04 0.4; $en += "the camera $how pulls back (dolly out)"; $vi += 'kéo ra' }
-    if ([Math]::Abs($x) -ge 0.03) { $side = if ($x -lt 0) { 'right' } else { 'left' }; $how = & $amount ([Math]::Abs($x)) 0.03 0.2; $en += "the camera $how slides to the $side (truck)"; $vi += "trượt $(if ($x -lt 0) { 'phải' } else { 'trái' })" }
-    if ([Math]::Abs($y) -ge 0.03) { $up = $y -gt 0; $how = & $amount ([Math]::Abs($y)) 0.03 0.2; $en += "the camera $how $(if ($up) { 'rises' } else { 'lowers' }) (pedestal $(if ($up) { 'up' } else { 'down' }))"; $vi += $(if ($up) { 'nâng lên' } else { 'hạ xuống' }) }
+    $cap = { param($v, $most) [Math]::Max(-$most, [Math]::Min($most, $v)) }
+    $x = & $cap ([double]$Move.panX) ([double]$Settings.maxPan); $y = & $cap ([double]$Move.panY) ([double]$Settings.maxPan)
+    $z = [double]$Move.zoom
+    $z = [Math]::Max(1 / [double]$Settings.maxZoom, [Math]::Min([double]$Settings.maxZoom, $z))
+    $percent = { param($v) [int][Math]::Round(100 * $v) }
+    if ($z -ge 1.04) { $en += "the camera slowly pushes in (dolly forward) so the product looks about $(& $percent ($z - 1))% larger by the end of this phase"; $vi += 'đẩy vào' }
+    elseif ($z -le 0.96) { $en += "the camera slowly pulls back (dolly out) so the product looks about $(& $percent (1 - $z))% smaller by the end of this phase"; $vi += 'kéo ra' }
+    if ([Math]::Abs($x) -ge 0.03) { $side = if ($x -lt 0) { 'right' } else { 'left' }; $en += "the camera slowly slides to the $side (truck), about $(& $percent ([Math]::Abs($x)))% of the frame width"; $vi += "trượt $(if ($x -lt 0) { 'phải' } else { 'trái' })" }
+    if ([Math]::Abs($y) -ge 0.03) { $up = $y -gt 0; $en += "the camera slowly $(if ($up) { 'rises' } else { 'lowers' }) (pedestal), about $(& $percent ([Math]::Abs($y)))% of the frame height"; $vi += $(if ($up) { 'nâng lên' } else { 'hạ xuống' }) }
     if (-not $en.Count) { $en += 'the camera holds almost still, a locked-off shot with only a faint drift'; $vi += 'đứng yên' }
     [pscustomobject]@{ En = ($en -join ' while '); Vi = ($vi -join ', ') }
 }
 
-# The moves of one part, in phases of about phaseSeconds: "0-4 s: ..., 4-8 s: ...".
+# The moves of one part, in phases of about phaseSeconds of the sample (a stretched video measures the same stretch of
+# the sample, so a slower video does not read as still): "0-5 s: ..., 5-10 s: ...".
 function Get-PartMoves($Motion, $Part, $Settings) {
-    $count = [Math]::Max(1, [Math]::Round($Part.Seconds / [double]$Settings.phaseSeconds))
-    $step = $Part.Seconds / $count
+    $source = $Part.End - $Part.Start
+    $count = [Math]::Max(1, [Math]::Round($source / [double]$Settings.phaseSeconds))
+    $step = $source / $count
     $grokStep = $Part.GrokSeconds / $count
     @(for ($k = 0; $k -lt $count; $k++) {
-        $text = ConvertTo-MoveText (Get-ReferenceMove $Motion ($Part.Start + $k * $step) ($Part.Start + ($k + 1) * $step))
+        $text = ConvertTo-MoveText (Get-ReferenceMove $Motion ($Part.Start + $k * $step) ($Part.Start + ($k + 1) * $step)) $Settings
         [pscustomobject]@{ From = [Math]::Round($k * $grokStep); To = [Math]::Round(($k + 1) * $grokStep); En = $text.En; Vi = $text.Vi }
     })
 }
@@ -228,7 +241,7 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
         [void](Get-HubFfmpeg)
         $info = Get-HubVideoInfo $plan.Reference
         if ($info.Seconds -lt 1) { throw 'Video mẫu quá ngắn hoặc không đọc được.' }
-        $parts = @(Get-ReferenceParts $info.Seconds (Get-ReferenceCuts $plan.Reference ([double]$plan.Settings.sceneThreshold)) $plan.Settings)
+        $parts = @(Get-ReferenceParts $info.Seconds (Get-ReferenceCuts $plan.Reference ([double]$plan.Settings.sceneThreshold)) $plan.Settings $plan.Length)
         $motion = Save-ReferenceMotion $plan.Reference $info $logs
         foreach ($part in $parts) { $part | Add-Member -NotePropertyName Moves -NotePropertyValue @(Get-PartMoves $motion $part $plan.Settings) }
     } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }

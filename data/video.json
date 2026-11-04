@@ -1,10 +1,11 @@
 {
-  "note": "Theo phong cách video mẫu: ffmpeg tách cảnh theo chỗ cắt (sceneThreshold), cảnh ngắn hơn minShot giây gộp vào cảnh trước, cảnh dài hơn 15 giây chia thành đoạn nối tiếp; vidstabdetect đo máy chạy theo từng chặng khoảng phaseSeconds giây. Bối cảnh lấy từ ảnh sản phẩm. Chỉ dùng maxSeconds giây đầu, tối đa maxParts đoạn. Grok chỉ làm 6, 10 hoặc 15 giây; mỗi đoạn được tăng/giảm tốc cho đúng độ dài đoạn mẫu; đoạn nối tiếp trộn mờ fadeSeconds.",
+  "note": "Theo phong cách video mẫu: ffmpeg tách cảnh theo chỗ cắt (sceneThreshold), cảnh ngắn hơn minShot giây gộp vào cảnh trước, cảnh dài hơn 15 giây chia thành đoạn nối tiếp; vidstabdetect đo máy chạy theo từng chặng khoảng phaseSeconds giây của mẫu, mỗi chặng giới hạn maxZoom (đẩy/kéo) và maxPan (trượt, phần khung). Độ dài video: như mẫu hoặc lengths giây (giãn đều, máy chạy chậm hơn). Bối cảnh lấy từ ảnh sản phẩm. Chỉ dùng maxSeconds giây đầu, tối đa maxParts đoạn. Grok chỉ làm 6, 10 hoặc 15 giây; mỗi đoạn được tăng/giảm tốc cho đúng độ dài đoạn mẫu; đoạn nối tiếp trộn mờ fadeSeconds.",
   "grokSeconds": [
     6,
     10,
     15
   ],
+  "lengths": [30, 45, 60],
   "resolutions": [
     "480p",
     "720p",
@@ -14,6 +15,8 @@
   "sceneThreshold": 0.3,
   "minShot": 1,
   "phaseSeconds": 4,
+  "maxZoom": 1.25,
+  "maxPan": 0.12,
   "fadeSeconds": 0.2,
   "maxSeconds": 60,
   "maxParts": 12,

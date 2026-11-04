@@ -69,6 +69,7 @@ main { height: 100%; display: flex; flex-direction: column; }
           <h2>Video mẫu (lấy cách quay, nhịp cắt cảnh; bối cảnh theo ảnh sản phẩm)</h2>
           <div class="photo" id="sampleBox" tabindex="0"></div>
           <div class="settings" style="margin-top:10px">
+            <div><label>Độ dài video</label><div class="seg" id="length"></div></div>
             <div><label>Độ phân giải</label><div class="seg" id="resolution"></div></div>
           </div>
           <div id="total" class="total"></div>
@@ -106,7 +107,7 @@ window.addEventListener("error", (e) => fetch("/api/client-error", { method: "PO
 const fileUrl = (path) => `/file?path=${encodeURIComponent(path)}`;
 const KEY = "product-video:make:v1";
 let DATA = { settings: { resolutions: ["720p"], grokSeconds: [6, 10, 15], maxSeconds: 60, minutesPerPart: 1.5 } };
-const make = Object.assign({ photo: "", model: "", name: "", reference: "", resolution: "720p" }, store.get(KEY, {}));
+const make = Object.assign({ photo: "", model: "", name: "", reference: "", length: 0, resolution: "720p" }, store.get(KEY, {}));
 const run = { since: 0, running: false, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, parts: 0 };
 const persist = () => store.set(KEY, make);
 
@@ -153,7 +154,7 @@ function renderTotal() {
   if (!make.reference) return $("total").replaceChildren();
   if (!sampleInfo) return $("total").replaceChildren(el("span", { className: "muted", textContent: "Đang đọc video mẫu…" }));
   const s = DATA.settings;
-  const used = Math.min(sampleInfo.seconds, s.maxSeconds);
+  const used = make.length || Math.min(sampleInfo.seconds, s.maxSeconds);
   const parts = Math.max(1, Math.ceil(used / Math.max(...s.grokSeconds) - 0.001));
   const r = sampleInfo.width / sampleInfo.height;
   const shape = r < 0.8 ? "dọc 9:16" : r > 1.25 ? "ngang 16:9" : "vuông 1:1";
@@ -236,12 +237,14 @@ document.addEventListener("paste", (e) => {
 });
 
 function renderSettings() {
-  $("resolution").replaceChildren(...DATA.settings.resolutions.map((v) => {
-    const b = el("button", { type: "button", textContent: v });
-    b.setAttribute("aria-pressed", v === make.resolution);
-    b.onclick = () => { make.resolution = v; persist(); renderSettings(); };
+  const seg = (id, values, key, fmt) => $(id).replaceChildren(...values.map((v) => {
+    const b = el("button", { type: "button", textContent: fmt(v) });
+    b.setAttribute("aria-pressed", v === make[key]);
+    b.onclick = () => { make[key] = v; persist(); renderSettings(); renderTotal(); };
     return b;
   }));
+  seg("length", [0, ...DATA.settings.lengths], "length", (v) => (v ? `${v}s` : "Như mẫu"));
+  seg("resolution", DATA.settings.resolutions, "resolution", (v) => v);
 }
 $("name").value = make.name;
 $("name").oninput = (e) => { make.name = e.target.value; persist(); };
@@ -309,7 +312,7 @@ $("run").onclick = async () => {
   if (!make.photo) return toast("Thêm ảnh sản phẩm");
   if (!make.name.trim()) { $("name").focus(); return toast("Điền tên sản phẩm"); }
   if (!make.reference) return toast("Chọn video mẫu");
-  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, resolution: make.resolution };
+  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, length: make.length, resolution: make.resolution };
   Object.assign(run, { since: 0, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, parts: 0 });
   const r = await fetch("/api/run", { method: "POST", body: JSON.stringify(job) }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));
@@ -322,6 +325,7 @@ $("open").onclick = () => fetch("/api/open-folder", { method: "POST" }).catch(()
 fetch("/api/data").then((r) => r.json()).then((data) => {
   DATA = data;
   if (!data.settings.resolutions.includes(make.resolution)) make.resolution = data.settings.defaultResolution;
+  if (make.length && !data.settings.lengths.includes(make.length)) make.length = 0;
   render(); renderSettings(); renderRun(); poll();
 }, () => toast("Không đọc được dữ liệu. Đóng và mở lại Product Video."));
 
