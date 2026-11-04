@@ -19,10 +19,11 @@ function Format-Seconds([double]$Value) { $Value.ToString('0.###', $script:Invar
 # data/video.json, with the user's own choices when they saved some: the transitions and angles not to use
 # (workspace/lua-chon.json { bannedTransitions, bannedAngles }, from the window's Hiệu ứng and Góc máy pages; an update
 # keeps workspace/).
-function Get-VideoSettings {
+# -Defaults: data/video.json alone (the tests, which must not depend on this machine's choices).
+function Get-VideoSettings([switch]$Defaults) {
     $settings = Read-JsonFile (Join-Path (Get-ToolRoot) 'data/video.json')
     $own = Join-Path (Get-ToolRoot) 'workspace/lua-chon.json'
-    if (Test-Path -LiteralPath $own -PathType Leaf) {
+    if (-not $Defaults -and (Test-Path -LiteralPath $own -PathType Leaf)) {
         $choices = Read-JsonFile $own
         foreach ($key in 'bannedTransitions', 'bannedAngles') { if ($null -ne $choices.$key) { $settings.$key = @($choices.$key) } }
     }

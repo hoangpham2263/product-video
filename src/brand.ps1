@@ -1,5 +1,5 @@
-﻿# The brand's intro and outro on a finished video (ffmpeg only), when workspace/brand/brand.json is there (an update
-# keeps workspace/; the brand is the user's, not the app's). Chosen with the user 04/11/2026 for GRENHEIM:
+﻿# The brand's intro and outro on every finished video (ffmpeg only), from data/brand/ (brand.json and its logos): part
+# of the app, so every install has them (the user, 04/11/2026: not kept in workspace/). Chosen with the user for GRENHEIM:
 #   Intro: no clip of its own; the logo over the first seconds, the picture kept sharp (the user turned down a blurred
 #   opening). The white logo with a soft dark shadow hugging its strokes, like a text-shadow, centred at 2/5 of the
 #   height: a faint logo, a round glow behind it and a frosted disc were all turned down (it was lost on wood and lamps,
@@ -15,9 +15,9 @@ $script:BrandFonts = @{
     serif = @('C:\Windows\Fonts\georgia.ttf', '/System/Library/Fonts/Supplemental/Georgia.ttf', '/Library/Fonts/Georgia.ttf')
 }
 
-function Get-BrandFolder { Join-Path (Get-ToolRoot) 'workspace/brand' }
+function Get-BrandFolder { Join-Path (Get-ToolRoot) 'data/brand' }
 
-# The brand, or $null when the user has none.
+# The brand, or $null when the app ships none.
 function Read-Brand {
     $file = Join-Path (Get-BrandFolder) 'brand.json'
     if (Test-Path -LiteralPath $file -PathType Leaf) { Read-JsonFile $file } else { $null }

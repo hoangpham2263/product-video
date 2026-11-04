@@ -19,7 +19,7 @@ function Assert-Throws([string]$Name, [scriptblock]$Action, [string]$Pattern) {
 function Get-Shape($Items) { (@($Items) | ForEach-Object { '{0}-{1}' -f (Format-Seconds $_.Start), (Format-Seconds $_.End) }) -join ' ' }
 function Get-Angles($Items) { (@($Items) | ForEach-Object { $_.Angle }) -join ',' }
 
-$settings = Get-VideoSettings
+$settings = Get-VideoSettings -Defaults
 # The checks below count on these; data/video.json changing them needs the checks looked at again.
 Assert-That 'data/video.json: shotSeconds 2.6, minShot 1, maxShots 24, grokSeconds 6, maxZoom 1.25, maxPan 0.12, angles from close-up' {
     $settings.shotSeconds -eq 2.6 -and $settings.minShot -eq 1 -and $settings.maxShots -eq 24 -and $settings.grokSeconds -eq 6 -and

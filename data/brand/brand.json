@@ -1,0 +1,66 @@
+{
+  "note": "Intro/outro GRENHEIM, chốt 04/11/2026; nằm trong app (data/brand/), không để ở workspace/. Số đo theo khung 720x1280: ngang nhân theo chiều rộng thật, dọc và cỡ chữ theo chiều cao thật. Chữ nằm trên mốc 65% chiều cao (vùng an toàn Reels/TikTok). Intro: logo TRẮNG rõ hẳn (logo-intro.png), tâm ở 2/5 chiều cao, có bóng đen mềm ôm sát nét logo kiểu text-shadow (shadow: opacity, blur). Người dùng đã bác logo mờ, quầng sáng tròn sau logo và đĩa kính mờ (04/11/2026).",
+  "intro": {
+    "logo": "logo-intro.png",
+    "width": 190,
+    "y": 417,
+    "opacity": 1,
+    "fadeIn": [
+      0.1,
+      0.5
+    ],
+    "fadeOut": [
+      2.6,
+      0.7
+    ],
+    "shadow": {
+      "opacity": 0.75,
+      "blur": 7
+    }
+  },
+  "outro": {
+    "seconds": 5,
+    "fade": 0.6,
+    "background": "103e2e",
+    "logo": {
+      "file": "logo-outro.png",
+      "width": 280,
+      "y": 250,
+      "start": 0.1
+    },
+    "lines": [
+      {
+        "text": "NATURAL WOOD FURNITURE",
+        "font": "light",
+        "size": 24,
+        "color": "white@0.85",
+        "y": 590,
+        "start": 0.5
+      },
+      {
+        "text": "Nature's beauty, shaped by artisan hands.",
+        "font": "serif",
+        "size": 30,
+        "color": "white",
+        "y": 650,
+        "start": 0.8
+      },
+      {
+        "text": "Free shipping across the US",
+        "font": "light",
+        "size": 26,
+        "color": "white",
+        "y": 730,
+        "start": 1.2
+      },
+      {
+        "text": "GRENHEIM.COM",
+        "font": "light",
+        "size": 24,
+        "color": "white@0.8",
+        "y": 780,
+        "start": 1.4
+      }
+    ]
+  }
+}
