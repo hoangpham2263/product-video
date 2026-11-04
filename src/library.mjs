@@ -1,8 +1,8 @@
 // Kho ảnh: the public GitHub repo hoangpham2263/product-video-sources. manifest.json lists its groups, each of one kind
 // (products, models, videos) with its files; a file is <kind>/<group>/<name>. The window shows a kind's switched-on
-// groups with raw links as thumbnails; a picked photo is downloaded once into workspace/library/<kind>/<group>/ and its
-// local path goes into the job, as an uploaded one does. PV_SOURCES_URL points tests at a local copy.
-//   GET  /api/library?kind=products|models   { groups: [{ name, files: [{ name, url, local }] }] } or { error }
+// groups with raw links as thumbnails; a picked photo or video is downloaded once into workspace/library/<kind>/<group>/
+// and its local path goes into the job, as an uploaded one does. PV_SOURCES_URL points tests at a local copy.
+//   GET  /api/library?kind=products|models|videos{ groups: [{ name, files: [{ name, url, local }] }] } or { error }
 //   POST /api/library/pick { kind, group, name }   { path }
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
@@ -11,8 +11,8 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 export const SOURCES_URL = "https://raw.githubusercontent.com/hoangpham2263/product-video-sources/main";
-const KINDS = ["products", "models"];
-const IMAGE = /\.(png|jpe?g|webp)$/i;
+const FILES = { products: /\.(png|jpe?g|webp)$/i, models: /\.(png|jpe?g|webp)$/i, videos: /\.(mp4|mov|webm)$/i };
+const KINDS = Object.keys(FILES);
 const safe = (s) => typeof s === "string" && s.length > 0 && s.length <= 200 && !/[\\/]|^\.\.?$/.test(s);
 
 export function createLibrary({ workspace, base = process.env.PV_SOURCES_URL || SOURCES_URL, request = fetch }) {
@@ -36,7 +36,7 @@ export function createLibrary({ workspace, base = process.env.PV_SOURCES_URL || 
     .filter((g) => g.kind === kind && g.enabled !== false && safe(g.name))
     .map((g) => ({
       name: g.name.normalize("NFC"),
-      files: [].concat(g.files || []).filter((f) => safe(f.name) && IMAGE.test(f.name)).map((f) => {
+      files: [].concat(g.files || []).filter((f) => safe(f.name) && FILES[kind].test(f.name)).map((f) => {
         const local = localPath(kind, g.name, f.name);
         return { name: f.name, url: fileUrl(kind, g.name, f.name), local: local && existsSync(local) ? local : "" };
       }),
@@ -54,7 +54,7 @@ export function createLibrary({ workspace, base = process.env.PV_SOURCES_URL || 
     }
     if (path === "/api/library/pick" && req.method === "POST") {
       const { kind, group, name } = await body(req);
-      if (!KINDS.includes(kind) || !safe(group) || !safe(name) || !IMAGE.test(name)) { json(res, 400, { error: "Ảnh không hợp lệ." }); return true; }
+      if (!KINDS.includes(kind) || !safe(group) || !safe(name) || !FILES[kind].test(name)) { json(res, 400, { error: "Ảnh không hợp lệ." }); return true; }
       const file = localPath(kind, group, name);
       if (!file) { json(res, 400, { error: "Ảnh không hợp lệ." }); return true; }
       if (!existsSync(file)) {
@@ -66,7 +66,7 @@ export function createLibrary({ workspace, base = process.env.PV_SOURCES_URL || 
           await rename(`${file}.part`, file);
         } catch {
           await rm(`${file}.part`, { force: true });
-          json(res, 502, { error: "Chưa tải được ảnh từ kho. Kiểm tra mạng rồi thử lại." });
+          json(res, 502, { error: "Chưa tải được tệp từ kho. Kiểm tra mạng rồi thử lại." });
           return true;
         }
       }

@@ -28,7 +28,8 @@ test("each kind lists only its switched-on groups and their photos, with raw lin
     assert.deepEqual(r.data.groups.map((g) => [g.name, g.files.map((f) => f.name)]), [["Nội thất", ["a.jpg"]]]);
     assert.equal(r.data.groups[0].files[0].url, `${SOURCES_URL}/products/N%E1%BB%99i%20th%E1%BA%A5t/a.jpg`);
     assert.deepEqual((await call(handle, "GET", "/api/library?kind=models")).data.groups.map((g) => g.name), ["Nữ"]);
-    assert.equal((await call(handle, "GET", "/api/library?kind=videos")).status, 400);
+    assert.deepEqual((await call(handle, "GET", "/api/library?kind=videos")).data.groups.map((g) => g.files.map((f) => f.name)), [["v.mp4"]]);
+    assert.equal((await call(handle, "GET", "/api/library?kind=other")).status, 400);
     assert.equal((await call(handle, "GET", "/api/other")).handled, false);
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
@@ -44,7 +45,7 @@ test("a picked photo is downloaded once into workspace/library and its path retu
     assert.equal(await readFile(first.data.path, "utf8"), "png-bytes");
     await call(handle, "POST", "/api/library/pick", { kind: "models", group: "Nữ", name: "m.png" });
     assert.equal(downloads, 1);
-    for (const bad of [{ kind: "models", group: "..", name: "m.png" }, { kind: "models", group: "Nữ", name: "../m.png" }, { kind: "videos", group: "Mẫu", name: "v.mp4" }]) {
+    for (const bad of [{ kind: "models", group: "..", name: "m.png" }, { kind: "models", group: "Nữ", name: "../m.png" }, { kind: "videos", group: "Mẫu", name: "v.jpg" }]) {
       assert.equal((await call(handle, "POST", "/api/library/pick", bad)).status, 400);
     }
   } finally { await rm(workspace, { recursive: true, force: true }); }

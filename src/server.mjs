@@ -35,23 +35,13 @@ const logError = (where, text) => {
 process.on("uncaughtException", (e) => { logError("Máy chủ Product Video", e.stack || e); process.exit(1); });
 process.on("unhandledRejection", (e) => logError("Máy chủ Product Video", e?.stack || e));
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm" };
 const IMAGE_EXT = [".png", ".jpg", ".jpeg", ".webp"];
-const SERVED_EXT = [...IMAGE_EXT, ".mp4"];
+const SERVED_EXT = [...IMAGE_EXT, ".mp4", ".mov", ".webm"];
 const CORE_ASSETS = ["tool.css", "hub.js"];
 
 const readJson = async (file) => JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
-async function pageData() {
-  const library = await readJson(join(root, "data", "angles.json"));
-  const settings = await readJson(join(root, "data", "video.json"));
-  return {
-    settings,
-    // The prompt text of each angle stays on the server; the window needs only what it shows.
-    // As photo is frame 0; the angles behind or beside the product (hiddenAngles) are not offered.
-    angles: library.angles.filter((a) => a.id !== "as-photo" && !(settings.hiddenAngles || []).includes(a.id)).map(({ text, ...angle }) => angle),
-    angleGroups: library.groups.filter((g) => g.id !== "base"),
-  };
-}
+const pageData = async () => ({ settings: await readJson(join(root, "data", "video.json")) });
 
 // ----- The run -----
 const run = { proc: null, events: [], stopped: false, exitCode: null, done: false, folder: "", logFile: "" };
@@ -66,6 +56,7 @@ function receive(line) {
 async function startRun(job) {
   if (run.proc) throw new Error("Đang chạy.");
   if (!job?.photo) throw new Error("Chưa có ảnh sản phẩm.");
+  if (!job?.reference) throw new Error("Chưa chọn video mẫu.");
   await mkdir(join(workspace, "temp"), { recursive: true });
   const stamp = Date.now();
   const jobFile = join(workspace, "temp", `job-${stamp}.json`);
@@ -97,7 +88,7 @@ const stopRun = () => { if (run.proc) { run.stopped = true; killTree(run.proc); 
 
 // ----- HTTP -----
 const send = (res, status, data) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(data)); };
-const body = async (req, limit = 60 * 1024 * 1024) => {
+const body = async (req, limit = 300 * 1024 * 1024) => {
   const chunks = []; let size = 0;
   for await (const c of req) { size += c.length; if (size > limit) throw new Error("Tệp quá lớn."); chunks.push(c); }
   return Buffer.concat(chunks);
@@ -141,10 +132,10 @@ async function handle(req, res) {
     return send(res, 200, { ok: true });
   }
   if (path === "/api/upload" && req.method === "POST") {
-    // A picked or dropped photo becomes a file the run reads (the window cannot hand PowerShell a browser blob).
+    // A picked or dropped photo or sample video becomes a file the run reads (the window cannot hand PowerShell a blob).
     const name = (url.searchParams.get("name") || "image.png").replace(/[^\w.-]/g, "_");
     const ext = extname(name).toLowerCase();
-    if (!IMAGE_EXT.includes(ext)) return send(res, 400, { error: "Chọn ảnh PNG, JPEG hoặc WebP." });
+    if (!SERVED_EXT.includes(ext)) return send(res, 400, { error: "Chọn ảnh PNG, JPEG, WebP hoặc video MP4, MOV, WebM." });
     await mkdir(uploads, { recursive: true });
     const file = join(uploads, `${randomUUID().replace(/-/g, "")}${ext}`);
     await writeFile(file, await body(req));

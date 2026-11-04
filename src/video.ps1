@@ -1,13 +1,13 @@
-﻿# Product Video's run: one product photo becomes a video of about a minute that moves around the product in one take.
-#   1. Key frames (Grok image): frame 0 is the photo rendered clean (or, with a model photo, the model presenting the
-#      product in the same room); frame i is the same room seen from scene i's camera angle (data/angles.json),
-#      only for the angles Grok's image edit does well (data/video.json keyframeAngles: close crops, high, overhead).
-#      Every frame is made from the product photo itself, not from the frame before, so the product does not drift.
-#      Orbits, low and wide views have no key frame: Grok's video model makes that camera move on its own.
-#   2. Clips (Grok video): clip i goes to frame i (Grok's last frame) and starts on the real last frame of clip i-1
-#      (ffmpeg), so each clip starts exactly where the one before ended; clip 1 starts on frame 0.
-#   3. One video (src/ffmpeg.ps1): the clips joined, the shared frame shown once.
-# Output: workspace/output/<time>-<product>/: khung-<i>-<angle>.png, clip-<i>.mp4, video-<product>.mp4, logs/.
+﻿# Product Video's run: the product photo, filmed the way a sample video (video mẫu) is filmed.
+#   1. The sample is read with ffmpeg: its cuts (scene change) split it into shots; a shot longer than Grok can make
+#      (15 s) is split into parts that follow each other. Its first and last frames, and every part's, are saved.
+#   2. Key frames (Grok image): each saved frame of the sample redrawn with the product in place of the furniture the
+#      shot is about (and, with a model photo, the person in it as that model). Same camera, room and light.
+#   3. Clips (Grok video): one per part, from its start frame to its end frame, so the camera moves as in the sample.
+#      A part that continues a shot starts on the real last frame of the part before it. Each clip is then sped up or
+#      slowed down to the part's own length, so the video keeps the sample's pace and cuts.
+#   4. One video (src/ffmpeg.ps1): the clips joined.
+# Output: workspace/output/<time>-<product>/: mau-<i>.png, khung-<i>.png, clip-<i>.mp4, video-<product>.mp4, logs/.
 # The window follows the run through @@EVENT lines (start, frame, clip, final, warning, done, fatal).
 
 function Get-ToolRoot { Split-Path $PSScriptRoot -Parent }
@@ -24,123 +24,114 @@ function ConvertTo-Slug([string]$Text) {
     if ($slug) { $slug } else { 'san-pham' }
 }
 function Get-ErrorCause([string]$Message) { if ($Message -match '\[CAUSE:(\w+)\]') { $Matches[1] } else { 'UNKNOWN' } }
+$script:Invariant = [Globalization.CultureInfo]::InvariantCulture
+function Format-Seconds([double]$Value) { $Value.ToString('0.###', $script:Invariant) }
 
 function Get-VideoSettings { Read-JsonFile (Join-Path (Get-ToolRoot) 'data/video.json') }
-function Get-AngleLibrary { Read-JsonFile (Join-Path (Get-ToolRoot) 'data/angles.json') }
 
-# The job the window sends, checked: { product, photo, model, scenes[], seconds, resolution, audio }. Scenes are angle
-# ids in the order the camera visits them; one may come back later in the video.
+# The job the window sends, checked: { product, photo, model, reference, resolution }.
 function Test-VideoJob($Job) {
     $settings = Get-VideoSettings
     if (-not ([string]$Job.product).Trim()) { throw 'Điền tên sản phẩm.' }
     if (-not $Job.photo -or -not (Test-Path -LiteralPath ([string]$Job.photo) -PathType Leaf)) { throw 'Chưa có ảnh sản phẩm.' }
     if ($Job.model -and -not (Test-Path -LiteralPath ([string]$Job.model) -PathType Leaf)) { throw 'Không thấy ảnh người mẫu.' }
-    $ids = @($Job.scenes | Where-Object { $_ })
-    if (-not $ids.Count) { throw 'Chọn ít nhất một cảnh.' }
-    if ($ids.Count -gt [int]$settings.maxScenes) { throw "Tối đa $($settings.maxScenes) cảnh, không phải $($ids.Count)." }
-    $library = @((Get-AngleLibrary).angles)
-    $scenes = @($ids | ForEach-Object {
-        $id = [string]$_
-        $angle = $library | Where-Object { $_.id -eq $id } | Select-Object -First 1
-        if (-not $angle -or $id -eq 'as-photo') { throw "Cảnh không có trong thư viện góc: $id." }
-        if (@($settings.hiddenAngles) -contains $id) { throw "Góc $($angle.label) phải quay ra sau hoặc sang hông, tool không dùng." }
-        $angle
-    })
-    # Seconds of each scene: one length for all (6, 10, 15), or "auto", the length data/video.json suggests for each
-    # angle's kind of camera move.
-    $sceneSeconds = if ([string]$Job.seconds -eq 'auto') {
-        @($scenes | ForEach-Object {
-            $byAngle = $settings.secondsByAngle.PSObject.Properties[[string]$_.id]
-            if ($byAngle) { [int]$byAngle.Value } else { [int]$settings.secondsByGroup.([string]$_.group) }
-        })
-    } else {
-        if (@($settings.seconds) -notcontains [int]$Job.seconds) { throw "Mỗi cảnh dài $(@($settings.seconds) -join ', ') giây, không phải $($Job.seconds)." }
-        @($scenes | ForEach-Object { [int]$Job.seconds })
-    }
-    if (@($sceneSeconds | Where-Object { @($settings.seconds) -notcontains $_ }).Count) { throw "data/video.json đề xuất độ dài Grok không làm được: $($sceneSeconds -join ', ')." }
+    if (-not $Job.reference -or -not (Test-Path -LiteralPath ([string]$Job.reference) -PathType Leaf)) { throw 'Chưa chọn video mẫu.' }
     if (@($settings.resolutions) -notcontains [string]$Job.resolution) { throw "Độ phân giải không hỗ trợ: $($Job.resolution)." }
-    $aspect = if ($Job.aspect) { [string]$Job.aspect } else { [string]$settings.defaultAspect }
-    if (@($settings.aspects) -notcontains $aspect) { throw "Tỷ lệ khung không hỗ trợ: $aspect." }
     [pscustomobject]@{
         Product = ([string]$Job.product).Trim(); Photo = [string]$Job.photo; Model = [string]$Job.model
-        Scenes = $scenes; SceneSeconds = $sceneSeconds; Resolution = [string]$Job.resolution; Audio = [bool]$Job.audio; Aspect = $aspect
-        # Scenes whose end is a key frame made by Grok image; the others end where the video's own camera move takes it.
-        Keyframes = @($settings.keyframeAngles)
-        # Close crops: the scene after one, with no key frame of its own, pulls back to frame 0 (see data/video.json).
-        Close = @($settings.closeAngles)
-        # Wide views with no key frame end on frame 0 too: left alone, Grok draws a room of its own.
-        Wide = @($settings.wideAngles)
-        AsPhoto = $library | Where-Object { $_.id -eq 'as-photo' } | Select-Object -First 1
+        Reference = [string]$Job.reference; Resolution = [string]$Job.resolution; Settings = $settings
     }
 }
 
-$script:VideoLight = 'Keep the time of day and the light direction of image 1, shaped like professional interior photography: soft diffused key light, open shadows, faithful wood color, no color cast. Premium photographed realism: clear grain, crisp edges, believable contact shadows; no CGI feel, HDR look, plastic gloss or sharpening halos. One image only: no collage, inset, split screen, text, logo or watermark.'
-
-# Frame i: the room of the product photo seen from one camera angle, the product unchanged (the core rules,
-# profile content). The as-photo angle is frame 0 without a model: the photo itself, rendered clean and sharp.
-function New-FramePrompt([string]$ProductName, $Angle, [int]$Index, [int]$Total) {
-    $moved = $Angle.id -ne 'as-photo'
-    $task = if ($moved) { 'RE-PHOTOGRAPH the room in IMAGE 1 as ONE new photorealistic photograph taken from a different camera position. Image 1 is the only reference for the room and the product; the new photograph must not repeat its framing.' }
-            else { 'EDIT THE PHOTOGRAPH IN IMAGE 1 into ONE clean, sharp, photorealistic photograph of the same scene, from the same camera.' }
-    @"
-TASK: $task
-Target product: $ProductName. This is key frame $Index of $Total of one continuous video shot in this room.
-
-STEP 1 - ROOM
-Image 1 is the only room. Its walls, floor, windows, light, plants and every other object stay exactly as they are, in the same arrangement; only the camera moves and the whole view changes perspective together. Do not add, remove, move or restyle anything.
-
-STEP 2 - PRODUCT
-$(Get-VideoProductRules 1)
-Show the product without any brand name or logo.
-
-STEP 3 - CAMERA ($($Angle.label_en))
-$($Angle.text)
-$(if ($moved) { 'Obey this framing exactly; the result must visibly be taken from this new position. A side the photo does not show stays consistent with the visible side.' })
-
-STEP 4 - LIGHT AND OUTPUT
-$script:VideoLight No people.
-"@
+# Grok's frame shape nearest to the sample's.
+function Get-VideoAspect([int]$Width, [int]$Height) {
+    $ratio = $Width / [double]$Height
+    if ($ratio -lt 0.8) { '9:16' } elseif ($ratio -gt 1.25) { '16:9' } else { '1:1' }
 }
 
-# Frame 0 with a model: the person of image 2 presenting the product in the room of image 1, from the photo's camera.
-function New-IntroFramePrompt([string]$ProductName) {
+# Where the sample cuts (seconds), from ffmpeg's scene score.
+function Get-ReferenceCuts([string]$Video, [double]$Threshold) {
+    $log = (Invoke-HubFfmpeg @('-hide_banner', '-i', $Video, '-an', '-filter:v', "select='gt(scene,$(Format-Seconds $Threshold))',showinfo", '-f', 'null', '-')).Log
+    @([regex]::Matches($log, 'pts_time:([\d.]+)') | ForEach-Object { [double]::Parse($_.Groups[1].Value, $script:Invariant) })
+}
+
+# The parts Grok makes: shots (between cuts; one shorter than minShot joins the shot before), each split into equal
+# parts of at most the longest Grok clip. Only the first maxSeconds of the sample are used.
+#   { Shot, Start, End, Seconds, GrokSeconds, Continues }
+function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings) {
+    $end = [Math]::Min($Duration, [double]$Settings.maxSeconds)
+    $bounds = @(0.0)
+    foreach ($cut in ($Cuts | Sort-Object)) {
+        if ($cut - $bounds[-1] -ge [double]$Settings.minShot -and $end - $cut -ge [double]$Settings.minShot) { $bounds += $cut }
+    }
+    $bounds += $end
+    $lengths = @($Settings.grokSeconds | ForEach-Object { [int]$_ } | Sort-Object)
+    $longest = $lengths[-1]
+    $parts = @()
+    for ($s = 0; $s -lt $bounds.Count - 1; $s++) {
+        $length = $bounds[$s + 1] - $bounds[$s]
+        $count = [Math]::Ceiling($length / $longest - 0.001)
+        for ($p = 0; $p -lt $count; $p++) {
+            $seconds = $length / $count
+            $grok = $lengths | Where-Object { $_ -ge $seconds - 0.05 } | Select-Object -First 1
+            $parts += [pscustomobject]@{
+                Shot = $s + 1; Start = $bounds[$s] + $p * $seconds; End = $bounds[$s] + ($p + 1) * $seconds
+                Seconds = $seconds; GrokSeconds = $(if ($grok) { $grok } else { $longest }); Continues = $p -gt 0
+            }
+        }
+    }
+    if ($parts.Count -gt [int]$Settings.maxParts) { throw "Video mẫu có $($parts.Count) đoạn, tối đa $($Settings.maxParts). Chọn video ngắn hơn hoặc ít cảnh cắt hơn." }
+    $parts
+}
+
+# One frame of the sample at $At seconds. Near the end the video stream can stop before the container says it does
+# (8.54 s of video in an 8.64 s file): then the last frame there is.
+function Save-ReferenceFrame([string]$Video, [double]$At, [string]$Png) {
+    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-ss', (Format-Seconds ([Math]::Max(0, $At))), '-i', $Video, '-frames:v', '1', $Png)) 'lấy được khung của video mẫu'
+    if (-not (Test-Path -LiteralPath $Png)) { Save-HubVideoLastFrame $Video $Png }
+}
+
+# A clip brought to $Seconds by changing its speed, without sound.
+function Set-HubVideoLength([string]$Video, [double]$Seconds, [string]$Output) {
+    $info = Get-HubVideoInfo $Video
+    $factor = if ($info.Seconds -gt 0) { $Seconds / $info.Seconds } else { 1 }
+    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-an', '-filter:v', "setpts=$(Format-Seconds $factor)*PTS", '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', $Output)) 'chỉnh được độ dài clip'
+}
+
+$script:VideoLight = 'Premium photographed realism: clear grain, crisp edges, believable contact shadows; no CGI feel, HDR look, plastic gloss or sharpening halos. One image only: no collage, inset, split screen, text, logo or watermark.'
+
+# A frame of the sample with the product in it: image 1 the sample's frame, image 2 the product, image 3 the model.
+function New-FramePrompt([string]$ProductName, [bool]$Model) {
+    $person = if ($Model) { "`nSTEP 3 - PERSON (image 3)`nIf image 1 shows a person, replace them with the person from image 3: the same face, hair, skin tone, body and outfit, in the pose, place and size of the person in image 1. Nothing else of image 3 comes into the result. Rule 6 does not forbid this person; it still applies to everything else. If image 1 shows no person, add none.`n" } else { '' }
     @"
-TASK: EDIT THE PHOTOGRAPH IN IMAGE 1 into ONE photorealistic brand photograph of the same room, with the person from IMAGE 2 standing beside the product and presenting it. It is the opening frame of a product video.
+TASK: REDRAW THE FRAME IN IMAGE 1 (a frame of a sample video) as ONE photorealistic photograph with the product from IMAGE 2 in it. Same camera position, height, lens, framing and focus as image 1; the result must line up with image 1.
 Target product: $ProductName.
 
-STEP 1 - ROOM (image 1)
-Image 1 is the only room: walls, floor, windows, light and every object stay as they are, in the same arrangement. The camera stays where it is in image 1; pull back slightly only if needed so the person and the whole product both fit.
+STEP 1 - SHOT (image 1)
+Keep image 1's room, walls, floor, windows, light, time of day, colors, props and depth of field exactly as they are. Only the furniture piece the shot is about (the main one, in focus or at the center) is replaced by the product, in the same place and on the same floor line, at the product's true scale. If image 1 shows only a close part of that piece, show the matching part of the product the same way. If the shot is about no furniture at all, place the product where it fits naturally in view, not covering the subject.
 
-STEP 2 - PRODUCT (image 1)
-$(Get-VideoProductRules 1)
-Rule 6 does not forbid the one person from image 2 that this task adds; it still applies to everything else.
-
-STEP 3 - PERSON (image 2)
-Image 2 controls only the person: the same face, hair, skin tone, body and outfit, recognisably the same person. Nothing else of image 2 (its background, props, flags or text) comes into the result.
-Place the person standing on the floor next to the product, at true scale, turned slightly toward the camera with a warm natural smile, one hand gently presenting the product. The person never covers the product or touches it in a way that hides its shape.
-
-STEP 4 - LIGHT AND OUTPUT
-Light the person with the room's own light and direction, with matching shadows. $script:VideoLight
+STEP 2 - PRODUCT (image 2)
+$(Get-VideoProductRules 2)
+Show the product without any brand name or logo. Nothing of image 2's background comes into the result.
+$person
+STEP $(if ($Model) { 4 } else { 3 }) - OUTPUT
+Light the product with image 1's light and direction, with matching shadows. $script:VideoLight
 "@
 }
 
-# Clip i: one camera move from frame i-1 (first frame) to frame i (last frame, when there is one). The intro clip lets
-# the model present the product and leave the frame, since the next frame has no one in it.
-# With no last image the camera only leans toward the angle (a small arc, a push, a slide) and stays on the side of the
-# room the photo shows: whatever it turns to that the photo does not show, Grok invents (data/video.json motionNote).
-function New-ClipPrompt([string]$ProductName, $Angle, [int]$Index, [int]$Total, [int]$Seconds, [bool]$Intro, [bool]$HasEnd, [bool]$Reveal = $false) {
-    $end = if ($Reveal) { "END: the last image, the real room with the whole product. The camera pulls back, travelling through a $($Angle.label_en) view, and lands exactly on it; every wall, window, picture and piece of furniture is the one in the last image." }
-           elseif ($HasEnd) { "END: the last image, a $($Angle.label_en) view. Land exactly on it." }
-           else { "END: the camera moves only a little toward a $($Angle.label_en) view: a small arc of at most 15 to 20 degrees, or a slow push-in, pull-back, rise or slide. It stays on the side of the room the first image shows and never turns to a side, corner or wall the first image does not show. The product stays exactly as in the first image." }
-    $people = if ($Intro) { 'The person in the first image smiles, looks at the product and presents it with one slow, graceful hand gesture, then calmly walks out of frame to the side; by the end there is no one in the frame. Their face and outfit stay the same throughout.' }
-              else { 'No people.' }
+# Clip of one part: from the start image to the end image, the camera move of the sample.
+function New-ClipPrompt([string]$ProductName, [int]$Index, [int]$Total, [int]$Seconds, [bool]$HasEnd, [bool]$Model) {
+    $end = if ($HasEnd) { 'END: the last image. Land exactly on it. Move the camera from the start view to the end view the way a real camera would (dolly, slider, crane, gimbal or locked off), easing in and out, with natural parallax; if both images are framed the same, the camera holds almost still with a slow, gentle drift.' }
+           else { 'The camera holds the start framing with a slow, gentle push-in.' }
+    # Tried 04/11/2026: told only "add no one", Grok still brought in a hand that picked up the cup on the table.
+    $still = 'No hands, arms or people enter the frame; nobody touches, picks up or moves anything. Every prop on and around the product stays exactly where it is.'
+    $people = if ($Model) { "Only a person already in the first image may move, calmly and naturally, with the same face and outfit throughout. $still" } else { "Only a person already in the first image may move, calmly and naturally. $still" }
     @"
 One continuous $Seconds-second shot (part $Index of $Total of a product film), one smooth camera move with no cuts, no fades and no zoom jumps.
 START: the first image.
 $end
-Move the camera steadily from the start view to the end view on a real camera path (dolly, slider, crane or gimbal), easing in and out, with natural parallax.
-The room is a fixed physical set and only the camera moves through it: walls, windows, pictures, rug, furniture and props keep their exact shapes, sizes and places relative to each other, with true parallax, and nothing slides, swaps or redraws. Any part of the room the first image does not show stays plain and simple: no new furniture, windows, pictures or decor. The product, $ProductName, is a rigid real object: it never moves, bends, morphs or changes shape, color, wood grain or number of parts. Nothing appears or disappears.
-Photorealistic interior film look, steady exposure, soft natural daylight. No text, no logos. $people
+The room is a fixed physical set: walls, windows, pictures, rug, furniture and props keep their exact shapes, sizes and places, and nothing slides, swaps or redraws. The product, $ProductName, is a rigid real object: it never moves, bends, morphs or changes shape, color, grain or number of parts. Nothing appears or disappears.
+Photorealistic interior film look, steady exposure. No text, no logos. $people
 "@
 }
 
@@ -163,85 +154,85 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
     $slug = ConvertTo-Slug $plan.Product
     $folder = Join-Path $OutRoot ("{0}-{1}" -f [DateTime]::Now.ToString("yyyy-MM-dd_HH'h'mm'm'ss's'"), $slug)
     New-Item -ItemType Directory -Force -Path (Join-Path $folder 'logs') | Out-Null
-    $total = $plan.Scenes.Count
-    Send-Event @{ kind = 'start'; folder = $folder; scenes = $total; seconds = ($plan.SceneSeconds | Measure-Object -Sum).Sum; intro = [bool]$plan.Model }
-    try { [void](Get-HubFfmpeg) } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
-    $bridged = $false
-    try { Start-ImageBridge (Get-ToolRoot) -NewSession; $bridged = $true } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
 
-    # 1. Key frames.
-    $frames = @('') * ($total + 1)
-    for ($i = 0; $i -le $total -and -not $script:Run.Abort; $i++) {
-        $intro = $i -eq 0 -and $plan.Model
-        $angle = if ($i -eq 0) { $plan.AsPhoto } else { $plan.Scenes[$i - 1] }
-        $label = if ($intro) { 'Người mẫu giới thiệu' } elseif ($i -eq 0) { 'Ảnh gốc' } else { [string]$angle.label }
-        if ($i -gt 0 -and $plan.Keyframes -notcontains $angle.id) {
-            Send-Event @{ kind = 'frame'; index = $i; label = $label; file = ''; ok = $true; message = 'Không cần khung ảnh: video tự đi máy tới góc này.' }
-            continue
-        }
-        $file = Join-Path $folder ("khung-{0}-{1}.png" -f $i, $(if ($intro) { 'nguoi-mau' } else { $angle.id }))
-        $prompt = if ($intro) { New-IntroFramePrompt $plan.Product } else { New-FramePrompt $plan.Product $angle ($i + 1) ($total + 1) }
-        $images = if ($intro) { @($plan.Photo, $plan.Model) } else { @($plan.Photo) }
-        Write-Utf8 (Join-Path $folder "logs/khung-$i-prompt.txt") $prompt
-        Write-Host "  [FRAME] $i/$total $label" -ForegroundColor Cyan
-        $event = @{ kind = 'frame'; index = $i; label = $label; file = ''; ok = $true; message = '' }
-        try { [void](Invoke-GrokStep 'image' $prompt $images $file @{ Aspect = $plan.Aspect }); $frames[$i] = $file; $event.file = $file }
-        catch {
-            $event.ok = $false; $event.message = $_.Exception.Message
-            # Without frame 0 the video still starts: from the photo itself (and without the model).
-            if ($i -eq 0 -and -not $script:Run.Abort) {
-                $frames[0] = $plan.Photo
-                Send-Event @{ kind = 'warning'; message = "Khung mở đầu chưa tạo được, video bắt đầu từ ảnh gốc$(if ($plan.Model) { ', không có người mẫu' }). $($event.message)" }
-            }
-        }
-        Send-Event $event
+    # 1. The sample.
+    try {
+        [void](Get-HubFfmpeg)
+        $info = Get-HubVideoInfo $plan.Reference
+        if ($info.Seconds -lt 1) { throw 'Video mẫu quá ngắn hoặc không đọc được.' }
+        $parts = @(Get-ReferenceParts $info.Seconds (Get-ReferenceCuts $plan.Reference ([double]$plan.Settings.sceneThreshold)) $plan.Settings)
+    } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
+    $aspect = Get-VideoAspect $info.Width $info.Height
+    $total = $parts.Count
+    # Frames to make: the start of every shot, then the end of every part.
+    $frameJobs = @()
+    for ($i = 1; $i -le $total; $i++) {
+        $part = $parts[$i - 1]
+        if (-not $part.Continues) { $frameJobs += [pscustomobject]@{ Part = $i; Role = 'start'; At = $part.Start + 0.05; Label = "Cảnh $($part.Shot): đầu" } }
+        $frameJobs += [pscustomobject]@{ Part = $i; Role = 'end'; At = $part.End - 0.1; Label = "Đoạn $($i): cuối" }
     }
+    Send-Event @{ kind = 'start'; folder = $folder; frames = $frameJobs.Count; parts = $total; shots = $parts[-1].Shot; seconds = [Math]::Round(($parts | Measure-Object Seconds -Sum).Sum, 1); aspect = $aspect }
+    Write-Utf8 (Join-Path $folder 'logs/mau.json') (ConvertTo-Json -InputObject @{ reference = $plan.Reference; width = $info.Width; height = $info.Height; seconds = $info.Seconds; aspect = $aspect; parts = $parts } -Depth 4)
+    try { Start-ImageBridge (Get-ToolRoot) -NewSession } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
 
-    # 2. Clips, each from the frame before to its own. $ends[i]: the real last frame of clip i (ffmpeg).
-    $clips = @()
-    $ends = @('') * ($total + 1)
-    for ($i = 1; $i -le $total -and -not $script:Run.Abort; $i++) {
-        $angle = $plan.Scenes[$i - 1]
-        $file = Join-Path $folder ("clip-{0}.mp4" -f $i)
-        $event = @{ kind = 'clip'; index = $i; label = [string]$angle.label; file = ''; ok = $true; message = '' }
-        # The clip before ended near frame i-1, not exactly on it: starting from its real last frame makes the cut seamless.
-        # When the clip before failed, the latest frame there is (an end or a key frame) is the start.
-        $start = ''
-        for ($k = $i - 1; $k -ge 0 -and -not $start; $k--) { $start = if ($ends[$k]) { $ends[$k] } else { $frames[$k] } }
-        $intro = $i -eq 1 -and $plan.Model -and $frames[0] -ne $plan.Photo
-        # After a close crop the start shows only part of the product: with nothing to aim at, Grok invents the rest.
-        # Frame 0 (the whole product) is the end then, unless it has the model in it.
-        $afterClose = $i -gt 1 -and $plan.Close -contains $plan.Scenes[$i - 2].id
-        $reveal = -not $frames[$i] -and ($afterClose -or $plan.Wide -contains $angle.id) -and $frames[0] -and -not ($plan.Model -and $frames[0] -ne $plan.Photo)
-        $endFrame = if ($frames[$i]) { $frames[$i] } elseif ($reveal) { $frames[0] } else { '' }
-        $hasEnd = [bool]$endFrame
-        $prompt = New-ClipPrompt $plan.Product $angle $i $total $plan.SceneSeconds[$i - 1] $intro $hasEnd $reveal
-        Write-Utf8 (Join-Path $folder "logs/clip-$i-prompt.txt") $prompt
-        Write-Host "  [CLIP] $i/$total $($angle.id)" -ForegroundColor Cyan
+    # 2. Key frames, each from the sample's frame and the product photo itself, so the product does not drift.
+    $starts = @{}; $ends = @{}
+    $prompt = New-FramePrompt $plan.Product ([bool]$plan.Model)
+    Write-Utf8 (Join-Path $folder 'logs/khung-prompt.txt') $prompt
+    for ($f = 0; $f -lt $frameJobs.Count -and -not $script:Run.Abort; $f++) {
+        $frame = $frameJobs[$f]
+        $sample = Join-Path $folder ("mau-{0}.png" -f $f)
+        $file = Join-Path $folder ("khung-{0}.png" -f $f)
+        $event = @{ kind = 'frame'; index = $f; label = $frame.Label; file = ''; sample = ''; ok = $true; message = '' }
+        Write-Host "  [FRAME] $($f + 1)/$($frameJobs.Count) $($frame.Label)" -ForegroundColor Cyan
         try {
-            if (-not $start) { throw 'Cảnh trước không có khung cuối để bắt đầu.' }
-            $images = @($start) + @(if ($hasEnd) { $endFrame })
-            [void](Invoke-GrokStep 'video' $prompt $images $file @{ Seconds = $plan.SceneSeconds[$i - 1]; Resolution = $plan.Resolution; Audio = $plan.Audio; Aspect = $plan.Aspect; TimeoutSec = 900 })
-            $clips += $file; $event.file = $file
-            $ends[$i] = Join-Path $folder ("khung-{0}-cuoi-clip.png" -f $i)
-            try { Save-HubVideoLastFrame $file $ends[$i] } catch { $ends[$i] = '' }
+            Save-ReferenceFrame $plan.Reference $frame.At $sample
+            $event.sample = $sample
+            $images = @($sample, $plan.Photo) + @(if ($plan.Model) { $plan.Model })
+            [void](Invoke-GrokStep 'image' $prompt $images $file @{ Aspect = $aspect })
+            $event.file = $file
+            if ($frame.Role -eq 'start') { $starts[$frame.Part] = $file } else { $ends[$frame.Part] = $file }
         } catch { $event.ok = $false; $event.message = $_.Exception.Message }
         Send-Event $event
     }
 
-    # 3. One video.
+    # 3. Clips. $last[i]: the real last frame of clip i, where a part that continues it starts.
+    $clips = @(); $last = @{}
+    for ($i = 1; $i -le $total -and -not $script:Run.Abort; $i++) {
+        $part = $parts[$i - 1]
+        $raw = Join-Path $folder ("clip-{0}-grok.mp4" -f $i)
+        $file = Join-Path $folder ("clip-{0}.mp4" -f $i)
+        $event = @{ kind = 'clip'; index = $i; label = "Cảnh $($part.Shot), $(Format-Seconds ([Math]::Round($part.Seconds, 1)))s"; file = ''; ok = $true; message = '' }
+        $start = if ($part.Continues) { if ($last[$i - 1]) { $last[$i - 1] } else { $ends[$i - 1] } } else { $starts[$i] }
+        $end = $ends[$i]
+        $prompt = New-ClipPrompt $plan.Product $i $total $part.GrokSeconds ([bool]$end) ([bool]$plan.Model)
+        Write-Utf8 (Join-Path $folder "logs/clip-$i-prompt.txt") $prompt
+        Write-Host "  [CLIP] $i/$total" -ForegroundColor Cyan
+        try {
+            if (-not $start) { throw 'Thiếu khung đầu của đoạn này.' }
+            $images = @($start) + @(if ($end) { $end })
+            [void](Invoke-GrokStep 'video' $prompt $images $raw @{ Seconds = $part.GrokSeconds; Resolution = $plan.Resolution; Audio = $false; Aspect = $aspect; TimeoutSec = 900 })
+            Set-HubVideoLength $raw $part.Seconds $file
+            $clips += $file; $event.file = $file
+            $last[$i] = Join-Path $folder ("clip-{0}-cuoi.png" -f $i)
+            try { Save-HubVideoLastFrame $raw $last[$i] } catch { $last[$i] = '' }
+        } catch { $event.ok = $false; $event.message = $_.Exception.Message }
+        Send-Event $event
+    }
+
+    # 4. One video.
     $ok = $false
     if ($clips.Count) {
-        if ($clips.Count -lt $total) { Send-Event @{ kind = 'warning'; message = "Chỉ $($clips.Count)/$total cảnh tạo được; video ghép từ các cảnh đó nên có chỗ nhảy cảnh." } }
+        if ($clips.Count -lt $total) { Send-Event @{ kind = 'warning'; message = "Chỉ $($clips.Count)/$total đoạn tạo được; video ghép từ các đoạn đó." } }
         $final = Join-Path $folder "video-$slug.mp4"
         try {
             Join-HubVideoClips $clips $final
-            $info = Get-HubVideoInfo $final
-            Send-Event @{ kind = 'final'; file = $final; seconds = [Math]::Round($info.Seconds, 1); width = $info.Width; height = $info.Height }
+            $out = Get-HubVideoInfo $final
+            Send-Event @{ kind = 'final'; file = $final; seconds = [Math]::Round($out.Seconds, 1); width = $out.Width; height = $out.Height }
             $ok = $true
         } catch { Send-Event @{ kind = 'warning'; message = $_.Exception.Message } }
     }
     $stopped = if ($script:Run.Abort) { 'Dừng vì Grok/bridge cần người dùng xử lý (đăng nhập, hết lượt hoặc extension).' } else { '' }
-    Send-Event @{ kind = 'done'; ok = $ok; folder = $folder; clips = $clips.Count; scenes = $total; message = $stopped }
+    Send-Event @{ kind = 'done'; ok = $ok; folder = $folder; clips = $clips.Count; parts = $total; message = $stopped }
     if ($ok) { 0 } else { 1 }
 }
