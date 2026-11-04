@@ -1,11 +1,21 @@
 {
-  "note": "Làm theo video mẫu: ffmpeg tách cảnh theo chỗ cắt (sceneThreshold), cảnh ngắn hơn minShot giây gộp vào cảnh trước, cảnh dài hơn 15 giây chia đều thành đoạn nối tiếp. Chỉ dùng maxSeconds giây đầu của video mẫu, tối đa maxParts đoạn. Grok chỉ làm 6, 10 hoặc 15 giây; mỗi đoạn được tăng/giảm tốc cho đúng độ dài đoạn mẫu.",
-  "grokSeconds": [6, 10, 15],
-  "resolutions": ["480p", "720p", "1080p"],
+  "note": "Làm theo video mẫu: ffmpeg tách cảnh theo chỗ cắt (sceneThreshold), cảnh ngắn hơn minShot giây gộp vào cảnh trước; mỗi cảnh chia đều thành đoạn dài tối đa partSeconds giây, cuối mỗi đoạn là một khung lấy từ video mẫu nên máy bám đường đi của video mẫu. Chỉ dùng maxSeconds giây đầu, tối đa maxParts đoạn. Grok chỉ làm 6, 10 hoặc 15 giây; mỗi đoạn được tăng/giảm tốc cho đúng độ dài đoạn mẫu.",
+  "grokSeconds": [
+    6,
+    10,
+    15
+  ],
+  "resolutions": [
+    "480p",
+    "720p",
+    "1080p"
+  ],
   "defaultResolution": "720p",
   "sceneThreshold": 0.3,
-  "minShot": 1.0,
+  "minShot": 1,
+  "partSeconds": 3,
+  "fadeSeconds": 0.2,
   "maxSeconds": 60,
-  "maxParts": 8,
+  "maxParts": 24,
   "minutesPerPart": 1.5
 }

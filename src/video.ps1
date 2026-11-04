@@ -29,7 +29,8 @@ function Format-Seconds([double]$Value) { $Value.ToString('0.###', $script:Invar
 
 function Get-VideoSettings { Read-JsonFile (Join-Path (Get-ToolRoot) 'data/video.json') }
 
-# The job the window sends, checked: { product, photo, model, reference, resolution }.
+# The job the window sends, checked: { product, photo, model, reference, target, resolution }. Target (optional) names
+# the thing in the sample the product replaces; without it, the furniture each frame is about.
 function Test-VideoJob($Job) {
     $settings = Get-VideoSettings
     if (-not ([string]$Job.product).Trim()) { throw 'Điền tên sản phẩm.' }
@@ -39,7 +40,7 @@ function Test-VideoJob($Job) {
     if (@($settings.resolutions) -notcontains [string]$Job.resolution) { throw "Độ phân giải không hỗ trợ: $($Job.resolution)." }
     [pscustomobject]@{
         Product = ([string]$Job.product).Trim(); Photo = [string]$Job.photo; Model = [string]$Job.model
-        Reference = [string]$Job.reference; Resolution = [string]$Job.resolution; Settings = $settings
+        Reference = [string]$Job.reference; Target = ([string]$Job.target).Trim(); Resolution = [string]$Job.resolution; Settings = $settings
     }
 }
 
@@ -56,7 +57,9 @@ function Get-ReferenceCuts([string]$Video, [double]$Threshold) {
 }
 
 # The parts Grok makes: shots (between cuts; one shorter than minShot joins the shot before), each split into equal
-# parts of at most the longest Grok clip. Only the first maxSeconds of the sample are used.
+# parts of at most partSeconds. Every part's end is a frame of the sample, so the shorter the parts, the closer the
+# camera keeps to the sample's path (tried 04/11/2026: pinned only at its two ends, Grok drifted and eased in between).
+# Only the first maxSeconds of the sample are used.
 #   { Shot, Start, End, Seconds, GrokSeconds, Continues }
 function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings) {
     $end = [Math]::Min($Duration, [double]$Settings.maxSeconds)
@@ -67,10 +70,11 @@ function Get-ReferenceParts([double]$Duration, [double[]]$Cuts, $Settings) {
     $bounds += $end
     $lengths = @($Settings.grokSeconds | ForEach-Object { [int]$_ } | Sort-Object)
     $longest = $lengths[-1]
+    $most = [Math]::Min([double]$Settings.partSeconds, $longest)
     $parts = @()
     for ($s = 0; $s -lt $bounds.Count - 1; $s++) {
         $length = $bounds[$s + 1] - $bounds[$s]
-        $count = [Math]::Ceiling($length / $longest - 0.001)
+        $count = [Math]::Ceiling($length / $most - 0.001)
         for ($p = 0; $p -lt $count; $p++) {
             $seconds = $length / $count
             $grok = $lengths | Where-Object { $_ -ge $seconds - 0.05 } | Select-Object -First 1
@@ -100,21 +104,55 @@ function Set-HubVideoLength([string]$Video, [double]$Seconds, [string]$Output, [
     Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-an', '-filter:v', "setpts=$(Format-Seconds $factor)*PTS,framerate=fps=$Fps", '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', $Output)) 'chỉnh được độ dài clip'
 }
 
-$script:VideoLight = 'Premium photographed realism: clear grain, crisp edges, believable contact shadows; no CGI feel, HDR look, plastic gloss or sharpening halos. One image only: no collage, inset, split screen, text, logo or watermark.'
+# The parts as one video: a part that continues the one before fades into it over $Fade seconds, a new shot cuts.
+# Tried 04/11/2026: Grok redraws its start image slightly on the clip's second frame, so a plain join jumps there.
+#   $Items: { File, FadeIn }, all at $Fps (Set-HubVideoLength).
+function Join-PartClips($Items, [string]$Output, [double]$Fade, [int]$Fps = 30) {
+    $first = Get-HubVideoInfo $Items[0].File
+    $w = $first.Width - ($first.Width % 2); $h = $first.Height - ($first.Height % 2)
+    $inputs = @(); $chains = @()
+    for ($k = 0; $k -lt $Items.Count; $k++) {
+        $inputs += @('-i', $Items[$k].File)
+        $chains += "[${k}:v]fps=$Fps,scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,settb=AVTB[v$k]"
+    }
+    $label = 'v0'; $length = $first.Seconds
+    for ($k = 1; $k -lt $Items.Count; $k++) {
+        $seconds = (Get-HubVideoInfo $Items[$k].File).Seconds
+        if ($Items[$k].FadeIn) {
+            $chains += "[$label][v$k]xfade=transition=fade:duration=$(Format-Seconds $Fade):offset=$(Format-Seconds ($length - $Fade))[j$k]"
+            $length += $seconds - $Fade
+        } else {
+            $chains += "[$label][v$k]concat=n=2:v=1:a=0[j$k]"
+            $length += $seconds
+        }
+        $label = "j$k"
+    }
+    $arguments = @('-y', '-hide_banner') + $inputs + @('-filter_complex', ($chains -join ';'), '-map', "[$label]", '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-movflags', '+faststart', '-an', $Output)
+    Assert-HubFfmpeg (Invoke-HubFfmpeg $arguments) 'ghép được video'
+}
+
+$script:VideoLight ='Premium photographed realism: clear grain, crisp edges, believable contact shadows; no CGI feel, HDR look, plastic gloss or sharpening halos. One image only: no collage, inset, split screen, text, logo or watermark.'
 
 # A frame of the sample with the product in it: image 1 the sample's frame, image 2 the product, image 3 the model.
-function New-FramePrompt([string]$ProductName, [bool]$Model) {
+# A later frame of a shot also gets the frame redrawn just before it (the last image), so the product looks the same in
+# every frame the clips go through. With a target, only that thing is replaced, and a frame not showing it stays as it is
+# (a walk through a room shows the target only part of the way).
+function New-FramePrompt([string]$ProductName, [bool]$Model, [bool]$Anchor = $false, [string]$Target = '') {
+    $anchorIndex = if ($Model) { 4 } else { 3 }
+    $same = if ($Anchor) { "`nIMAGE $anchorIndex is the frame just before this one in the same shot, already redrawn. Wherever the product shows, it must be identical to the product in image $($anchorIndex): same shape, size, color, grain, legs and props on it, in the same place in the room; only the camera has moved, as image 1 shows." } else { '' }
+    $what = if ($Target) { "Only the $Target in image 1 is replaced by the product, in the same place and on the same floor line, at the product's true scale; nothing else changes. If image 1 shows only part of the $Target, show the matching part of the product the same way. If image 1 does not show the $Target at all, return image 1 unchanged and do not add the product." }
+            else { "Only the furniture piece the shot is about (the main one, in focus or at the center) is replaced by the product, in the same place and on the same floor line, at the product's true scale. If image 1 shows only a close part of that piece, show the matching part of the product the same way. If the shot is about no furniture at all, place the product where it fits naturally in view, not covering the subject." }
     $person = if ($Model) { "`nSTEP 3 - PERSON (image 3)`nIf image 1 shows a person, replace them with the person from image 3: the same face, hair, skin tone, body and outfit, in the pose, place and size of the person in image 1. Nothing else of image 3 comes into the result. Rule 6 does not forbid this person; it still applies to everything else. If image 1 shows no person, add none.`n" } else { '' }
     @"
 TASK: REDRAW THE FRAME IN IMAGE 1 (a frame of a sample video) as ONE photorealistic photograph with the product from IMAGE 2 in it. Same camera position, height, lens, framing and focus as image 1; the result must line up with image 1.
 Target product: $ProductName.
 
 STEP 1 - SHOT (image 1)
-Keep image 1's room, walls, floor, windows, light, time of day, colors, props and depth of field exactly as they are. Only the furniture piece the shot is about (the main one, in focus or at the center) is replaced by the product, in the same place and on the same floor line, at the product's true scale. If image 1 shows only a close part of that piece, show the matching part of the product the same way. If the shot is about no furniture at all, place the product where it fits naturally in view, not covering the subject.
+Keep image 1's room, walls, floor, windows, light, time of day, colors, props and depth of field exactly as they are. $what
 
 STEP 2 - PRODUCT (image 2)
 $(Get-VideoProductRules 2)
-Show the product without any brand name or logo. Nothing of image 2's background comes into the result.
+Show the product without any brand name or logo. Nothing of image 2's background comes into the result.$same
 $person
 STEP $(if ($Model) { 4 } else { 3 }) - OUTPUT
 Light the product with image 1's light and direction, with matching shadows. $script:VideoLight
@@ -123,7 +161,7 @@ Light the product with image 1's light and direction, with matching shadows. $sc
 
 # Clip of one part: from the start image to the end image, the camera move of the sample.
 function New-ClipPrompt([string]$ProductName, [int]$Index, [int]$Total, [int]$Seconds, [bool]$HasEnd, [bool]$Model) {
-    $end = if ($HasEnd) { 'END: the last image. Land exactly on it. Move the camera from the start view to the end view the way a real camera would (dolly, slider, crane, gimbal or locked off), easing in and out, with natural parallax; if both images are framed the same, the camera holds almost still with a slow, gentle drift.' }
+    $end = if ($HasEnd) { 'END: the last image. Land exactly on it. Move the camera from the start view to the end view in a straight, steady line at one constant speed from the first frame to the last (no easing, no pause, no speeding up), with natural parallax, as one short piece of a longer continuous move; if both images are framed the same, the camera holds still.' }
            else { 'The camera holds the start framing with a slow, gentle push-in.' }
     # Tried 04/11/2026: told only "add no one", Grok still brought in a hand that picked up the cup on the table.
     $still = 'No hands, arms or people enter the frame; nobody touches, picks up or moves anything. Every prop on and around the product stays exactly where it is.'
@@ -178,9 +216,11 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
     try { Start-ImageBridge (Get-ToolRoot) -NewSession } catch { Send-Event @{ kind = 'fatal'; message = $_.Exception.Message }; return 1 }
 
     # 2. Key frames, each from the sample's frame and the product photo itself, so the product does not drift.
-    $starts = @{}; $ends = @{}
-    $prompt = New-FramePrompt $plan.Product ([bool]$plan.Model)
+    $starts = @{}; $ends = @{}; $anchors = @{}
+    $prompt = New-FramePrompt $plan.Product ([bool]$plan.Model) $false $plan.Target
+    $anchored = New-FramePrompt $plan.Product ([bool]$plan.Model) $true $plan.Target
     Write-Utf8 (Join-Path $folder 'logs/khung-prompt.txt') $prompt
+    Write-Utf8 (Join-Path $folder 'logs/khung-sau-prompt.txt') $anchored
     for ($f = 0; $f -lt $frameJobs.Count -and -not $script:Run.Abort; $f++) {
         $frame = $frameJobs[$f]
         $sample = Join-Path $folder ("mau-{0}.png" -f $f)
@@ -191,8 +231,12 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
             Save-ReferenceFrame $plan.Reference $frame.At $sample
             $event.sample = $sample
             $images = @($sample, $plan.Photo) + @(if ($plan.Model) { $plan.Model })
-            [void](Invoke-GrokStep 'image' $prompt $images $file @{ Aspect = $aspect })
+            $shot = $parts[$frame.Part - 1].Shot
+            $anchor = if ($frame.Role -eq 'end') { $anchors[$shot] } else { '' }
+            if ($anchor) { $images += $anchor }
+            [void](Invoke-GrokStep 'image' $(if ($anchor) { $anchored } else { $prompt }) $images $file @{ Aspect = $aspect })
             $event.file = $file
+            $anchors[$shot] = $file
             if ($frame.Role -eq 'start') { $starts[$frame.Part] = $file } else { $ends[$frame.Part] = $file }
         } catch { $event.ok = $false; $event.message = $_.Exception.Message }
         Send-Event $event
@@ -214,21 +258,30 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
             if (-not $start) { throw 'Thiếu khung đầu của đoạn này.' }
             $images = @($start) + @(if ($end) { $end })
             [void](Invoke-GrokStep 'video' $prompt $images $raw @{ Seconds = $part.GrokSeconds; Resolution = $plan.Resolution; Audio = $false; Aspect = $aspect; TimeoutSec = 900 })
-            Set-HubVideoLength $raw $part.Seconds $file
-            $clips += $file; $event.file = $file
+            $clips += [pscustomobject]@{ Index = $i; Raw = $raw; File = $file }; $event.file = $raw
             $last[$i] = Join-Path $folder ("clip-{0}-cuoi.png" -f $i)
             try { Save-HubVideoLastFrame $raw $last[$i] } catch { $last[$i] = '' }
         } catch { $event.ok = $false; $event.message = $_.Exception.Message }
         Send-Event $event
     }
 
-    # 4. One video.
+    # 4. One video. Each clip is brought to its part's length, plus the fade into the next part when that one continues
+    # it (and was made), so the video keeps the sample's length.
     $ok = $false
     if ($clips.Count) {
         if ($clips.Count -lt $total) { Send-Event @{ kind = 'warning'; message = "Chỉ $($clips.Count)/$total đoạn tạo được; video ghép từ các đoạn đó." } }
         $final = Join-Path $folder "video-$slug.mp4"
+        $fade = [double]$plan.Settings.fadeSeconds
         try {
-            Join-HubVideoClips $clips $final
+            $items = @()
+            for ($k = 0; $k -lt $clips.Count; $k++) {
+                $clip = $clips[$k]
+                $next = if ($k + 1 -lt $clips.Count) { $clips[$k + 1] } else { $null }
+                $fadeOut = $next -and $next.Index -eq $clip.Index + 1 -and $parts[$next.Index - 1].Continues
+                Set-HubVideoLength $clip.Raw ($parts[$clip.Index - 1].Seconds + $(if ($fadeOut) { $fade } else { 0 })) $clip.File
+                $items += [pscustomobject]@{ File = $clip.File; FadeIn = $k -gt 0 -and $clips[$k - 1].Index -eq $clip.Index - 1 -and $parts[$clip.Index - 1].Continues }
+            }
+            Join-PartClips $items $final $fade
             $out = Get-HubVideoInfo $final
             Send-Event @{ kind = 'final'; file = $final; seconds = [Math]::Round($out.Seconds, 1); width = $out.Width; height = $out.Height }
             $ok = $true
