@@ -91,11 +91,13 @@ function Save-ReferenceFrame([string]$Video, [double]$At, [string]$Png) {
     if (-not (Test-Path -LiteralPath $Png)) { Save-HubVideoLastFrame $Video $Png }
 }
 
-# A clip brought to $Seconds by changing its speed, without sound.
-function Set-HubVideoLength([string]$Video, [double]$Seconds, [string]$Output) {
+# A clip brought to $Seconds by changing its speed, without sound, at $Fps. The new frames are blended from their
+# neighbours: tried 04/11/2026, Grok's 24 fps sped up to ~28 and then made 30 by repeating frames stuttered every half
+# second; motion interpolation (minterpolate) was smooth too but took minutes per clip.
+function Set-HubVideoLength([string]$Video, [double]$Seconds, [string]$Output, [int]$Fps = 30) {
     $info = Get-HubVideoInfo $Video
     $factor = if ($info.Seconds -gt 0) { $Seconds / $info.Seconds } else { 1 }
-    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-an', '-filter:v', "setpts=$(Format-Seconds $factor)*PTS", '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', $Output)) 'chỉnh được độ dài clip'
+    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-i', $Video, '-an', '-filter:v', "setpts=$(Format-Seconds $factor)*PTS,framerate=fps=$Fps", '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', $Output)) 'chỉnh được độ dài clip'
 }
 
 $script:VideoLight = 'Premium photographed realism: clear grain, crisp edges, believable contact shadows; no CGI feel, HDR look, plastic gloss or sharpening halos. One image only: no collage, inset, split screen, text, logo or watermark.'
