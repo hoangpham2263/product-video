@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
 import { createConfigApi } from "../core/setup/config-api.mjs";
 import { PWSH, toolEnv, psFile, psCommand, killTree, appWindow, onWindows } from "../core/platform.mjs";
-import { createLibrary } from "./library.mjs";
+import { createLibrary, SOURCES_URL } from "./library.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
@@ -43,8 +43,27 @@ const CORE_ASSETS = ["tool.css", "hub.js"];
 const readJson = async (file) => JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
 const pageData = async () => {
   const angles = await readJson(join(root, "data", "angles.json"));
-  return { settings: await readJson(join(root, "data", "video.json")), angles: { groups: angles.groups, list: angles.angles.map(({ id, label, group, description }) => ({ id, label, group, description })) } };
+  const settings = Object.assign(await readJson(join(root, "data", "video.json")), await readChoices());
+  return {
+    settings, samples: `${process.env.PV_SOURCES_URL || SOURCES_URL}/samples`,
+    angles: { groups: angles.groups, list: angles.angles.map(({ id, label, group, description }) => ({ id, label, group, description })) },
+  };
 };
+
+// ----- Lựa chọn: the transitions and angles the user switched off -----
+// Kept in workspace/lua-chon.json { bannedTransitions, bannedAngles } (an update keeps workspace/); a list not saved yet
+// is data/video.json's. src/plan.ps1 reads the same file. The Hiệu ứng and Góc máy pages save one list at a time.
+const choicesFile = join(workspace, "lua-chon.json");
+const readChoices = async () => (existsSync(choicesFile) ? await readJson(choicesFile) : {});
+async function saveChoice({ list, off }) {
+  const known = list === "bannedTransitions" ? (await readJson(join(root, "data", "video.json"))).transitionNames
+    : list === "bannedAngles" ? (await readJson(join(root, "data", "angles.json"))).angles.map((a) => a.id) : null;
+  if (!known) throw new Error("Danh sách không hợp lệ.");
+  const choices = await readChoices();
+  choices[list] = [...new Set([].concat(off || []).map(String))].filter((n) => known.includes(n));
+  await writeFile(choicesFile, JSON.stringify(choices, null, 2) + "\n", "utf8");
+  return { [list]: choices[list] };
+}
 
 // ----- Phân tích video mẫu -----
 // src/analyze-reference.ps1 reads a sample the way the run does (plan.ps1) and prints @@RESULT { shots, ... }; its
@@ -199,6 +218,10 @@ async function handle(req, res) {
   }
   if (path === "/api/analyze/save" && req.method === "POST") {
     try { return send(res, 200, await savePlan(JSON.parse((await body(req)).toString("utf8") || "{}"))); }
+    catch (e) { return send(res, 400, { error: e.message }); }
+  }
+  if (path === "/api/choices" && req.method === "POST") {
+    try { return send(res, 200, await saveChoice(JSON.parse((await body(req)).toString("utf8") || "{}"))); }
     catch (e) { return send(res, 400, { error: e.message }); }
   }
   if (path === "/api/run" && req.method === "POST") {

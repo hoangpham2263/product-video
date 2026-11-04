@@ -1,10 +1,11 @@
-﻿﻿# Offline checks of src/plan.ps1 (no AI, no ffmpeg): the scenes and shots of a sample, the default shots, the plan
+﻿# Offline checks of src/plan.ps1 (no AI, no ffmpeg): the scenes and shots of a sample, the default shots, the plan
 # file and the moves in words.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tests/plan.tests.ps1     (also run by tests/plan.test.mjs)
 # Prints one line per check; exits 1 when any fails.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'src/plan.ps1')
+. (Join-Path $root 'src/transitions.ps1')
 
 $script:Failed = 0
 function Assert-That([string]$Name, [scriptblock]$Check) {
@@ -57,6 +58,21 @@ Assert-That 'Default: 30 s is 12 shots of 2.5 s, defaultShots in order, opening 
 }
 Assert-That 'Default: 20 s is 8 shots, 60 s is 24' { (Get-DefaultShots $settings 20).Count -eq 8 -and (Get-DefaultShots $settings 60).Count -eq 24 }
 
+# --- Angles the user switched off (bannedAngles) ---
+$no = $settings.PSObject.Copy(); $no.bannedAngles = @('as-photo', 'close-up', 'detail')
+Assert-That 'Off angles: default shots keep their moves, never use an off angle, never repeat the one before' {
+    $s = Get-DefaultShots $no 30
+    $angles = @($s | ForEach-Object { $_.Angle })
+    -not ($angles | Where-Object { $no.bannedAngles -contains $_ }) -and $s[0].Move.zoom -eq 1.04 -and
+    @(for ($i = 1; $i -lt $angles.Count; $i++) { if ($angles[$i] -eq $angles[$i - 1]) { $i } }).Count -eq 0
+}
+Assert-That 'Off angles: a sample''s planned angle that is off, and the as-photo opening, take the next in turn' {
+    $s = Get-SampleShots (Get-SampleScenes 10.04 @(3, 5.25) @('as-photo', 'detail', 'three-quarter-left') $no) $no
+    $angles = @($s | ForEach-Object { $_.Angle })
+    -not ($angles | Where-Object { $no.bannedAngles -contains $_ }) -and $angles[0] -eq 'room-wide' -and $angles -contains 'three-quarter-left'
+}
+Assert-Throws 'Off angles: all off is refused with a hint' { $all = $settings.PSObject.Copy(); $all.bannedAngles = @(Get-AngleIds); Get-DefaultShots $all 20 } 'trang Góc máy'
+
 # --- Read-ReferencePlan ---
 $temp = Join-Path ([IO.Path]::GetTempPath()) ("pv-plan-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
@@ -92,6 +108,31 @@ $m = Get-ShotMoveText ([pscustomobject]@{ panX = 0; panY = 0; zoom = 1.04 }) 2.5
 Assert-That 'Shot move: 4% larger over 2.5 s asks Grok for about 10% over 6 s' { $m.Vi -eq 'đẩy vào' -and $m.En -match 'about 10% larger' }
 $m = Get-ShotMoveText ([pscustomobject]@{ panX = -0.04; panY = 0; zoom = 1 }) 2.5 $settings
 Assert-That 'Shot move: a 4% slide right over 2.5 s asks for about 10%' { $m.Vi -eq 'trượt phải' -and $m.En -match 'about 10% of the frame width' }
+
+# --- Get-MoveKind, Get-ShotTransitions ---
+function Get-Kind([double]$PanX, [double]$PanY, [double]$Zoom) { Get-MoveKind ([pscustomobject]@{ panX = $PanX; panY = $PanY; zoom = $Zoom }) }
+Assert-That 'Kind: the biggest of zoom, sideways and up/down wins; under 2% is still' {
+    (Get-Kind 0 0 1.04) -eq 'push' -and (Get-Kind 0 0 0.96) -eq 'pull' -and (Get-Kind -0.04 0 1) -eq 'right' -and (Get-Kind 0.04 0 1) -eq 'left' -and
+    (Get-Kind 0 0.035 1) -eq 'rise' -and (Get-Kind 0 -0.03 1) -eq 'lower' -and (Get-Kind 0.01 0.01 1.01) -eq 'still' -and (Get-Kind -0.06 0 1.03) -eq 'right'
+}
+Assert-That 'Cuts: one into each shot after the first, by its move, each kind''s list in turn' {
+    (Get-ShotTransitions $default $settings) -join ',' -eq 'smoothleft,fade,smoothright,dissolve,fade,fade,fadeslow,smoothdown,fade,fade,fadeslow'
+}
+Assert-That 'Cuts: hblur and zoomin are banned by default; a banned one is never used, even when listed (fade instead)' {
+    $s = $settings.PSObject.Copy(); $s.bannedTransitions = @('hblur', 'zoomin')
+    $s.transitions = [pscustomobject]@{ push = @('zoomin', 'fadeblack'); right = @('hblur'); left = @('hblur'); pull = @('fade'); rise = @('fade'); lower = @('fade'); still = @('fade') }
+    $cuts = Get-ShotTransitions $default $s
+    (@($settings.bannedTransitions) -join ',') -eq 'hblur,zoomin' -and -not ($cuts | Where-Object { $s.bannedTransitions -contains $_ }) -and $cuts[0] -eq 'fade' -and $cuts[1] -eq 'fadeblack'
+}
+Assert-That 'Cuts: never two moving cuts (slide, smooth, wipe) in a row; after one, the kind''s calm one or fade' {
+    $s = $settings.PSObject.Copy()
+    $s.transitions = [pscustomobject]@{ push = @('slideup'); right = @('smoothleft'); left = @('wiperight', 'fadeblack'); pull = @('slidedown'); rise = @('smoothdown'); lower = @('smoothup'); still = @('fade') }
+    $cuts = @(Get-ShotTransitions $default $s)
+    $moving = { param($n) $n -match '^(smooth|slide|wipe)' }
+    $pairs = @(for ($i = 1; $i -lt $cuts.Count; $i++) { if ((& $moving $cuts[$i]) -and (& $moving $cuts[$i - 1])) { $i } })
+    $pairs.Count -eq 0 -and $cuts[0] -eq 'smoothleft' -and $cuts[1] -eq 'fade' -and $cuts[3] -eq 'fade'
+}
+Assert-That 'Cuts: one shot has none' { @(Get-ShotTransitions @($default[0]) $settings).Count -eq 0 }
 
 if ($script:Failed) { Write-Host "$script:Failed check(s) failed"; exit 1 }
 Write-Host 'all checks passed'

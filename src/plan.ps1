@@ -16,8 +16,29 @@ function Write-Utf8([string]$Path, [string]$Text) {
 }
 $script:Invariant = [Globalization.CultureInfo]::InvariantCulture
 function Format-Seconds([double]$Value) { $Value.ToString('0.###', $script:Invariant) }
-function Get-VideoSettings { Read-JsonFile (Join-Path (Get-ToolRoot) 'data/video.json') }
+# data/video.json, with the user's own choices when they saved some: the transitions and angles not to use
+# (workspace/lua-chon.json { bannedTransitions, bannedAngles }, from the window's Hiệu ứng and Góc máy pages; an update
+# keeps workspace/).
+function Get-VideoSettings {
+    $settings = Read-JsonFile (Join-Path (Get-ToolRoot) 'data/video.json')
+    $own = Join-Path (Get-ToolRoot) 'workspace/lua-chon.json'
+    if (Test-Path -LiteralPath $own -PathType Leaf) {
+        $choices = Read-JsonFile $own
+        foreach ($key in 'bannedTransitions', 'bannedAngles') { if ($null -ne $choices.$key) { $settings.$key = @($choices.$key) } }
+    }
+    $settings
+}
 function Get-AngleIds { @((Read-JsonFile (Join-Path (Get-ToolRoot) 'data/angles.json')).angles | ForEach-Object { $_.id }) }
+
+# The angles shots may take turns through: the settings' angles the user has not switched off (all others of
+# data/angles.json when every one of those is off).
+function Get-TurnAngles($Settings) {
+    $off = @($Settings.bannedAngles)
+    $turns = @($Settings.angles | Where-Object { $off -notcontains $_ })
+    if (-not $turns.Count) { $turns = @(Get-AngleIds | Where-Object { $off -notcontains $_ -and $_ -ne 'as-photo' }) }
+    if (-not $turns.Count) { throw 'Mọi góc máy đều đang tắt: bật lại ít nhất một góc ở trang Góc máy.' }
+    $turns
+}
 
 # The video's shape. Codex draws only 2:3, 3:2 and 1:1 and Grok's video keeps its start image's shape, so these are the
 # only three. auto: the sample's (nearest), else 2:3.
@@ -65,23 +86,26 @@ function Get-SampleScenes([double]$End, [double[]]$Cuts, [string[]]$Angles, $Set
 # The shots of a sample: each scene cut into equal pieces of at most shotSeconds of the video. $Length (seconds, 0: as
 # the sample) stretches every scene alike. Angle: the plan's for a scene's first piece; the others take turns through
 # the settings' angles, never the one just before nor (last piece of a scene) the one planned next; the video opens
-# as-photo.
+# as-photo. An angle the user switched off (bannedAngles) is never used, planned or not: the next one in turn instead.
 #   { Index, Scene, Start, End (in the sample), Seconds (in the video), Angle }
 function Get-SampleShots($Scenes, $Settings, [double]$Length = 0) {
     $Scenes = @($Scenes)  # one scene comes as one object, which has no Count in Windows PowerShell 5.1
     $end = $Scenes[-1].End
     $stretch = if ($Length -gt 0) { $Length / $end } else { 1 }
-    $turns = @($Settings.angles); $turn = 0
+    $off = @($Settings.bannedAngles)
+    $turns = Get-TurnAngles $Settings; $turn = 0
+    $opening = if ($off -notcontains 'as-photo') { 'as-photo' } else { $turns[$turn++] }
     $shots = @(); $previous = ''
     for ($s = 0; $s -lt $Scenes.Count; $s++) {
         $scene = $Scenes[$s]
+        $planned = if ($scene.Angle -and $off -notcontains $scene.Angle) { $scene.Angle } else { '' }
         $source = $scene.End - $scene.Start
         $count = [Math]::Ceiling($source * $stretch / [double]$Settings.shotSeconds - 0.001)
         $after = if ($s + 1 -lt $Scenes.Count) { $Scenes[$s + 1].Angle } else { '' }
         for ($p = 0; $p -lt $count; $p++) {
             $avoid = if ($p -eq $count - 1) { $after } else { '' }
-            $angle = if ($p -eq 0 -and $scene.Angle) { $scene.Angle }
-                     elseif ($shots.Count -eq 0) { 'as-photo' }
+            $angle = if ($p -eq 0 -and $planned) { $planned }
+                     elseif ($shots.Count -eq 0) { $opening }
                      else { do { $next = $turns[$turn++ % $turns.Count] } while (($next -eq $previous -or $next -eq $avoid) -and $turns.Count -gt 2); $next }
             $shots += [pscustomobject]@{
                 Index = $shots.Count + 1; Scene = $scene.Index; Start = $scene.Start + $p * $source / $count; End = $scene.Start + ($p + 1) * $source / $count
@@ -94,15 +118,21 @@ function Get-SampleShots($Scenes, $Settings, [double]$Length = 0) {
     $shots
 }
 
-# Without a sample: defaultShots in turn, each with its own move, $Length seconds in all.
+# Without a sample: defaultShots in turn, each with its own move, $Length seconds in all. A shot whose angle the user
+# switched off keeps its move and takes the next angle in turn (never the one just before).
 #   { Index, Seconds, Angle, Move: { panX, panY, zoom } }
 function Get-DefaultShots($Settings, [double]$Length) {
     $count = [Math]::Ceiling($Length / [double]$Settings.shotSeconds - 0.001)
     Assert-ShotCount $count $Settings
     $list = @($Settings.defaultShots)
+    $off = @($Settings.bannedAngles)
+    $turns = Get-TurnAngles $Settings; $turn = 0; $previous = ''
     @(for ($i = 0; $i -lt $count; $i++) {
         $d = $list[$i % $list.Count]
-        [pscustomobject]@{ Index = $i + 1; Seconds = $Length / $count; Angle = [string]$d.angle; Move = [pscustomobject]@{ panX = [double]$d.panX; panY = [double]$d.panY; zoom = [double]$d.zoom } }
+        $angle = [string]$d.angle
+        if ($off -contains $angle) { do { $angle = $turns[$turn++ % $turns.Count] } while ($angle -eq $previous -and $turns.Count -gt 1) }
+        $previous = $angle
+        [pscustomobject]@{ Index = $i + 1; Seconds = $Length / $count; Angle = $angle; Move = [pscustomobject]@{ panX = [double]$d.panX; panY = [double]$d.panY; zoom = [double]$d.zoom } }
     })
 }
 

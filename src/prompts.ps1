@@ -66,3 +66,33 @@ Move on a real camera path (dolly, slider, crane or gimbal) with natural paralla
 Photorealistic interior film look, steady exposure. No text, no logos. $people
 "@
 }
+
+# What each transition looks like, for Codex to choose by (ffmpeg xfade names).
+$script:TransitionLooks = [ordered]@{
+    fade = 'a plain crossfade'; fadeslow = 'a crossfade that lingers on the first picture, then gives way'; fadefast = 'a quick crossfade'
+    fadeblack = 'dips through black'; fadewhite = 'dips through white (a bright flash)'; fadegrays = 'crossfades through grey tones'
+    dissolve = 'a grainy pixel dissolve'; distance = 'a soft melt between the pictures'; zoomin = 'zooms into the first picture while the second appears'
+    radial = 'a clock-hand sweep'; pixelize = 'pixelates out and in'; circleopen = 'opens as a growing circle'; circleclose = 'closes as a shrinking circle'
+    smoothleft = 'the whole frame glides left'; smoothright = 'the whole frame glides right'; smoothup = 'the whole frame glides up'; smoothdown = 'the whole frame glides down'
+    slideleft = 'the new picture slides in from the right'; slideright = 'the new picture slides in from the left'; slideup = 'slides in from below'; slidedown = 'slides in from above'
+    wipeleft = 'a hard-edged wipe to the left'; wiperight = 'a hard-edged wipe to the right'; wipeup = 'a hard-edged wipe upwards'; wipedown = 'a hard-edged wipe downwards'
+    squeezeh = 'squeezes sideways'; squeezev = 'squeezes vertically'; vertopen = 'opens from the vertical middle'; horzopen = 'opens from the horizontal middle'
+}
+
+# The cuts of a film, for Codex to choose a transition for each from what the two shots show. Image k is cut k: the last
+# frame of the shot before (left) beside the first frame of the shot after (right).
+function New-TransitionPrompt([string]$ProductName, $Cuts, [string[]]$Allowed, [double]$Seconds) {
+    $list = ($Allowed | ForEach-Object { "- $_$(if ($script:TransitionLooks[$_]) { ": $($script:TransitionLooks[$_])" })" }) -join "`n"
+    $lines = ($Cuts | ForEach-Object { "Cut $($_.Index) (image $($_.Index)): from $($_.From) to $($_.To)" }) -join "`n"
+    @"
+You edit a calm, premium product film of $ProductName (natural wood furniture), made of short shots of one room. Choose the transition for each cut ($(Format-Seconds $Seconds) s long) so that it fits what the two pictures show and how the camera moves, never at random.
+Image k shows cut k: the last frame of the shot before on the left, the first frame of the shot after on the right.
+$lines
+
+Allowed transitions (use only these names):
+$list
+
+How to choose: for every cut, look at both pictures and pick the transition that fits them best (their framing, shapes, lines, light, and the camera move of the shot after). No transition is preferred over another; only the fit counts. The one rule: never two gliding, sliding or wiping cuts in a row.
+Answer with JSON only, no other text: [{"cut": 1, "transition": "<name>", "why": "<a few words>"}, ...] with one item per cut.
+"@
+}

@@ -37,6 +37,21 @@ main { height: 100%; display: flex; flex-direction: column; }
 .settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; }
 .settings label { margin-top: 0; }
 .total { margin-top: 10px; font-size: 14px; }
+/* Hiệu ứng không dùng: every transition as a toggle; a struck-through one is never used. */
+.shade { z-index: 20; } /* above the photo boxes' own buttons */
+/* Hiệu ứng, Góc máy: every transition or angle as a card with its sample; a click switches it on or off. */
+.cards { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-content: start; padding: 2px; }
+.cards h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 14px; font-weight: 400; color: var(--muted); }
+.card { background: #fff; border: 1px solid var(--line); cursor: pointer; display: flex; flex-direction: column; text-align: left; padding: 0; font: inherit; color: inherit; }
+.card:hover { border-color: var(--accent); }
+.card video, .card img, .card .noimg { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--control); display: block; }
+.card .name { padding: 6px 8px 0; }
+.card .sub { padding: 0 8px; font-size: 12px; color: var(--muted); }
+.card .state { margin: 6px 8px 8px; font-size: 12px; color: #006400; }
+.card.off { border-color: rgb(176, 0, 0); }
+.card.off video, .card.off img { opacity: .35; }
+.card.off .name { text-decoration: line-through; }
+.card.off .state { color: rgb(176, 0, 0); }
 .total b { color: var(--accent-dark); font-weight: 600; }
 /* The run */
 .steps { flex: 1; min-height: 0; overflow-y: auto; background: #fff; border: 1px solid #000; padding: 8px; display: grid; gap: 6px; align-content: start; }
@@ -69,7 +84,7 @@ header .seg { margin-left: 16px; }
 </head>
 <body data-fit="1100x760">
 <main>
-  <header><h1>Product Video</h1><div class="seg" id="tabs"><button type="button" data-page="make">Tạo video</button><button type="button" data-page="analyze">Phân tích video mẫu</button></div></header>
+  <header><h1>Product Video</h1><div class="seg" id="tabs"><button type="button" data-page="make">Tạo video</button><button type="button" data-page="analyze">Phân tích video mẫu</button><button type="button" data-page="fx">Hiệu ứng</button><button type="button" data-page="angles">Góc máy</button></div></header>
 
   <div class="page" id="make">
     <div class="layout">
@@ -89,6 +104,7 @@ header .seg { margin-left: 16px; }
           <div class="settings" style="margin-top:10px">
             <div><label>Độ dài video</label><div class="seg" id="length"></div></div>
             <div><label>Khổ</label><div class="seg" id="aspect"></div></div>
+            <div><label>Phụ đề tiếng Anh</label><div class="seg" id="captions"></div></div>
           </div>
           <div id="total" class="total"></div>
         </section>
@@ -133,6 +149,22 @@ header .seg { margin-left: 16px; }
     </div>
   </div>
 
+  <div class="page" id="fx" hidden>
+    <section class="group grow">
+      <h2>Hiệu ứng chuyển cảnh <span class="muted small" id="fxStatus"></span></h2>
+      <div class="note small" style="margin-bottom:10px">Rê chuột lên mẫu để xem. Bấm để chuyển Dùng / Không dùng, lưu ngay. Khi ghép video, app chỉ chọn trong các hiệu ứng đang dùng, theo hình của hai cảnh ở mỗi chỗ nối.</div>
+      <div class="cards" id="fxCards"></div>
+    </section>
+  </div>
+
+  <div class="page" id="angles" hidden>
+    <section class="group grow">
+      <h2>Góc máy <span class="muted small" id="angleStatus"></span></h2>
+      <div class="note small" style="margin-bottom:10px">Mẫu vẽ từ cùng một ảnh bàn ăn. Bấm để chuyển Dùng / Không dùng, lưu ngay. Góc không dùng sẽ được né khi tạo video: cảnh đó lấy góc kế tiếp, cả khi kế hoạch của video mẫu có góc đó.</div>
+      <div class="cards" id="angleCards"></div>
+    </section>
+  </div>
+
 </main>
 <input type="file" id="picker" accept="image/png,image/jpeg,image/webp" hidden>
 <input type="file" id="videoPicker" accept="video/mp4,video/quicktime,video/webm" hidden>
@@ -150,7 +182,7 @@ window.addEventListener("error", (e) => fetch("/api/client-error", { method: "PO
 const fileUrl = (path) => `/file?path=${encodeURIComponent(path)}`;
 const KEY = "product-video:make:v1";
 let DATA = { settings: { lengths: [30], defaultLength: 30, aspects: ["auto"], defaultResolution: "720p", shotSeconds: 2.6, maxSeconds: 60, minutesPerShot: 1.2, minutesPerFrameRound: 2, codexParallel: 4 } };
-const make = Object.assign({ photo: "", model: "", name: "", reference: "", length: 0, aspect: "auto" }, store.get(KEY, {}));
+const make = Object.assign({ photo: "", model: "", name: "", reference: "", length: 0, aspect: "auto", captions: null }, store.get(KEY, {}));
 const run = { since: 0, running: false, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 };
 const persist = () => store.set(KEY, make);
 
@@ -295,6 +327,59 @@ function renderSettings() {
   const lengths = make.reference ? [0, ...DATA.settings.lengths] : DATA.settings.lengths;
   seg("length", lengths, make.reference ? make.length : make.length || DATA.settings.defaultLength, "length", (v) => (v ? `${v}s` : "Như mẫu"));
   seg("aspect", DATA.settings.aspects, make.aspect, "aspect", (v) => ASPECT_LABEL[v] || v);
+  // Captions: English lines Codex writes from the shots and the brand (src/script.ps1), burnt in; null = the default.
+  seg("captions", [true, false], make.captions ?? DATA.settings.captions !== false, "captions", (v) => (v ? "Có" : "Không"));
+}
+// Hiệu ứng, Góc máy: every transition (a sample clip) and angle (a sample frame) from product-video-sources/samples, as a
+// card; a click switches it on or off and saves the list at once (server.mjs: workspace/lua-chon.json, which the run
+// reads through src/plan.ps1).
+const FX_LABEL = { fade: "Hoà hình", dissolve: "Lộ dần", hblur: "Nhoè ngang", fadeblack: "Qua đen", fadewhite: "Nháy trắng", fadegrays: "Qua xám", fadefast: "Hoà nhanh", fadeslow: "Hoà chậm", zoomin: "Phóng vào", radial: "Quét tròn", distance: "Tan biến", pixelize: "Vỡ điểm ảnh", circleopen: "Mở tròn", circleclose: "Đóng tròn", circlecrop: "Khung tròn", rectcrop: "Khung vuông", vertopen: "Mở dọc", vertclose: "Đóng dọc", horzopen: "Mở ngang", horzclose: "Đóng ngang", squeezeh: "Ép ngang", squeezev: "Ép dọc", diagtl: "Chéo từ trên trái", diagtr: "Chéo từ trên phải", diagbl: "Chéo từ dưới trái", diagbr: "Chéo từ dưới phải", hlslice: "Lát ngang sang trái", hrslice: "Lát ngang sang phải", vuslice: "Lát dọc lên", vdslice: "Lát dọc xuống", wipetl: "Gạt góc trên trái", wipetr: "Gạt góc trên phải", wipebl: "Gạt góc dưới trái", wipebr: "Gạt góc dưới phải",smoothleft: "Lướt trái", smoothright: "Lướt phải", smoothup: "Lướt lên", smoothdown: "Lướt xuống", slideleft: "Trượt trái", slideright: "Trượt phải", slideup: "Trượt lên", slidedown: "Trượt xuống", wipeleft: "Gạt trái", wiperight: "Gạt phải", wipeup: "Gạt lên", wipedown: "Gạt xuống" };
+async function saveChoice(list, off) {
+  const r = await fetch("/api/choices", { method: "POST", body: JSON.stringify({ list, off }) }).catch(() => null);
+  const body = r && (await r.json().catch(() => ({})));
+  if (!r?.ok) { toast(body?.error || "Chưa lưu được."); return false; }
+  DATA.settings[list] = body[list];
+  return true;
+}
+// One card: the sample, its name and whether it is used; a click switches it and saves the whole list.
+function choiceCard(list, id, media, name, sub, onSaved) {
+  const card = el("button", { type: "button", className: "card", title: sub || name });
+  const state = el("div", { className: "state" });
+  const show = () => { const off = (DATA.settings[list] || []).includes(id); card.classList.toggle("off", off); state.textContent = off ? "Không dùng" : "Đang dùng"; };
+  card.append(media, el("div", { className: "name", textContent: name }), el("div", { className: "sub", textContent: sub }), state);
+  card.onclick = async () => {
+    const off = new Set(DATA.settings[list] || []);
+    off.has(id) ? off.delete(id) : off.add(id);
+    if (await saveChoice(list, [...off])) { show(); onSaved(); }
+  };
+  show();
+  return card;
+}
+function renderFx() {
+  const names = DATA.settings.transitionNames || [];
+  const status = () => { $("fxStatus").textContent = `· đang dùng ${names.length - (DATA.settings.bannedTransitions || []).length}/${names.length}`; };
+  $("fxCards").replaceChildren(...names.map((n) => {
+    const video = el("video", { src: `${DATA.samples}/transitions/${n}.mp4#t=1.5`, muted: true, loop: true, playsInline: true, preload: "metadata" });
+    video.onmouseenter = () => { video.currentTime = 0; video.play().catch(() => {}); };
+    video.onmouseleave = () => { video.pause(); video.currentTime = 1.5; };
+    return choiceCard("bannedTransitions", n, video, FX_LABEL[n] || n, n, status);
+  }));
+  status();
+}
+function renderAngles() {
+  const list = DATA.angles?.list || [];
+  const status = () => { $("angleStatus").textContent = `· đang dùng ${list.length - (DATA.settings.bannedAngles || []).length}/${list.length}`; };
+  const cards = [];
+  for (const g of DATA.angles?.groups || []) {
+    cards.push(el("h3", { textContent: g.label }));
+    for (const a of list.filter((x) => x.group === g.id)) {
+      const img = el("img", { src: `${DATA.samples}/angles/${a.id}.jpg`, alt: a.label, loading: "lazy", decoding: "async" });
+      img.onerror = () => img.replaceWith(el("div", { className: "noimg" }));
+      cards.push(choiceCard("bannedAngles", a.id, img, a.label, a.description, status));
+    }
+  }
+  $("angleCards").replaceChildren(...cards);
+  status();
 }
 $("name").value = make.name;
 $("name").oninput = (e) => { make.name = e.target.value; persist(); };
@@ -360,7 +445,7 @@ async function poll() {
 $("run").onclick = async () => {
   if (!make.photo) return toast("Thêm ảnh sản phẩm");
   if (!make.name.trim()) { $("name").focus(); return toast("Điền tên sản phẩm"); }
-  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, length: make.length, aspect: make.aspect, resolution: DATA.settings.defaultResolution };
+  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, length: make.length, aspect: make.aspect, captions: make.captions ?? DATA.settings.captions !== false, resolution: DATA.settings.defaultResolution };
   Object.assign(run, { since: 0, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 });
   const r = await fetch("/api/run", { method: "POST", body: JSON.stringify(job) }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));
@@ -370,12 +455,16 @@ $("run").onclick = async () => {
 $("stop").onclick = async () => { await fetch("/api/stop", { method: "POST" }).catch(() => {}); toast("Đang dừng…"); };
 $("open").onclick = () => fetch("/api/open-folder", { method: "POST" }).catch(() => {});
 
-// Pages: Tạo video, Phân tích video mẫu (the one last open comes back).
+// Pages: Tạo video, Phân tích video mẫu, Hiệu ứng, Góc máy (the one last open comes back).
+const PAGES = ["make", "analyze", "fx", "angles"];
 function showPage(page) {
-  for (const p of ["make", "analyze"]) $(p).hidden = p !== page;
+  if (!PAGES.includes(page)) page = "make";
+  for (const p of PAGES) $(p).hidden = p !== page;
   for (const b of $("tabs").children) b.setAttribute("aria-pressed", b.dataset.page === page);
   store.set("page", page);
   if (page === "analyze") loadAnalyzeList();
+  if (page === "fx" && !$("fxCards").firstChild) renderFx();
+  if (page === "angles" && !$("angleCards").firstChild) renderAngles();
 }
 for (const b of $("tabs").children) b.onclick = () => showPage(b.dataset.page);
 
@@ -458,7 +547,7 @@ fetch("/api/data").then((r) => r.json()).then((data) => {
   if (make.length && !data.settings.lengths.includes(make.length)) make.length = 0;
   if (!data.settings.aspects.includes(make.aspect)) make.aspect = "auto";
   render(); renderRun(); poll();
-  showPage(store.get("page", "make") === "analyze" ? "analyze" : "make");
+  showPage(store.get("page", "make"));
 }, () => toast("Không đọc được dữ liệu. Đóng và mở lại Product Video."));
 
 </script>
