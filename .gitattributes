@@ -1,0 +1,10 @@
+# Developer-only files stay out of the release ZIP the app downloads.
+/tests export-ignore
+/worker export-ignore
+/docs export-ignore
+/.github export-ignore
+/test.sh export-ignore
+/test.cmd export-ignore
+/.gitattributes export-ignore
+/readme.md export-ignore
+*.command text eol=lf

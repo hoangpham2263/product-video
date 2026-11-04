@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grok Video</title>
+<link rel="icon" href="../icon.svg">
+<link rel="stylesheet" href="../../../hub/assets/tool.css">
+<script src="../../../hub/assets/hub.js" defer></script>
+<style>
+/* Fits the window: photos, scenes and settings on the left, the run (frames, clips, the video) on the right. */
+body { height: 100vh; overflow: hidden; }
+main { height: 100%; display: flex; flex-direction: column; }
+.layout { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) 400px; }
+.page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.col { display: flex; flex-direction: column; gap: 12px; min-height: 0; min-width: 0; }
+.col > .group { flex: none; }
+.col > .grow { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Tạo video */
+.photos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.photo { position: relative; height: 150px; background: #fff; border: 1px dashed var(--line); display: grid; place-content: center; text-align: center; color: var(--muted); cursor: pointer; overflow: hidden; padding: 8px; }
+.photo:hover, .photo.dropping { background: var(--hover); border-color: var(--accent); }
+.photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.photo .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; padding: 0; z-index: 1; }
+.photo b { color: var(--ink); font-weight: 400; display: block; margin-bottom: 4px; }
+#scenes { flex: 1; min-height: 120px; padding: 6px; gap: 4px; }
+.scene { display: grid; grid-template-columns: 26px minmax(0, 1fr) 34px 30px 30px 30px; gap: 6px; align-items: center; height: 36px; padding: 0 6px 0 10px; background: #fff; border: 1px solid var(--line); }
+.scene .btn { height: 28px; padding: 0; }
+.scene .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene.fixed { background: var(--control); color: var(--muted); }
+.addrow { display: flex; gap: 8px; margin-top: 8px; }
+/* The angle picker as tall as the buttons beside it (the shared select is 28px, buttons 32px). */
+.addrow select { height: 32px; }
+.settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; }
+.settings label { margin-top: 0; }
+.total { margin-bottom: 10px; font-size: 14px; }
+.total b { color: var(--accent-dark); font-weight: 600; }
+/* The run */
+.steps { flex: 1; min-height: 0; overflow-y: auto; background: #fff; border: 1px solid #000; padding: 8px; display: grid; gap: 6px; align-content: start; }
+.step { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 44px; }
+.step .thumb { width: 56px; height: 42px; object-fit: cover; background: var(--control); display: block; }
+.step .msg { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ok { color: #006400; } .bad { color: rgb(176, 0, 0); } .warn { color: rgb(176, 96, 0); }
+#final video { width: 100%; max-height: 260px; background: #000; display: block; margin-top: 8px; }
+.buttons { display: flex; gap: 8px; }
+.buttons .btn { flex: 1; }
+</style>
+</head>
+<body data-fit="1100x760">
+<main>
+  <header><a class="btn" id="menu" href="/" hidden>← Menu</a><h1>Grok Video</h1></header>
+
+  <div class="page" id="make">
+    <div class="layout">
+      <div class="col">
+        <section class="group">
+          <h2>Ảnh</h2>
+          <div class="photos">
+            <div class="photo" id="photoBox" tabindex="0"></div>
+            <div class="photo" id="modelBox" tabindex="0"></div>
+          </div>
+          <label for="name">Tên sản phẩm</label>
+          <input id="name" placeholder="Kệ đĩa than gỗ óc chó dáng cong">
+        </section>
+        <section class="group grow">
+          <h2>Cảnh (máy quay đi lần lượt, nối liền nhau)</h2>
+          <div class="list listbox" id="scenes"></div>
+          <div class="addrow"><select id="addAngle"></select><button class="btn" id="add" type="button">Thêm cảnh</button></div>
+        </section>
+        <section class="group">
+          <div id="total" class="total"></div>
+          <div class="settings">
+            <div><label>Mỗi cảnh</label><div class="seg" id="seconds"></div></div>
+            <div><label>Độ phân giải</label><div class="seg" id="resolution"></div></div>
+            <div><label>Tỷ lệ khung</label><div class="seg" id="aspect"></div></div>
+
+          </div>
+        </section>
+      </div>
+      <div class="col">
+        <section class="group actions-col">
+          <h2>Thao tác</h2>
+          <div class="buttons"><button class="btn primary" id="run" type="button">Tạo video</button><button class="btn" id="stop" type="button" disabled>Dừng</button><button class="btn" id="open" type="button" disabled>Mở thư mục</button></div>
+          <div class="note small" style="margin-top:8px">Chạy trong Chrome đã đăng nhập grok.com, qua extension Tools Hub. Mỗi cảnh: 1 ảnh Grok (~10 giây) và 1 video Grok (~1 phút).</div>
+        </section>
+        <section class="group grow">
+          <h2>Tiến độ <span class="muted small" id="status"></span></h2>
+          <div class="steps" id="steps"></div>
+          <div id="final"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+</main>
+<input type="file" id="picker" accept="image/png,image/jpeg,image/webp" hidden>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+function toast(text) { const t = $("toast"); t.textContent = text; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
+// Opened from the Tools Hub menu: a button back to it (?hub=<port>). The page is served by src/server.mjs.
+const hubPort = new URLSearchParams(location.search).get("hub");
+if (hubPort) { $("menu").href = `http://127.0.0.1:${hubPort}/`; $("menu").hidden = false; }
+window.addEventListener("error", (e) => fetch("/api/client-error", { method: "POST", body: JSON.stringify({ message: e.message, stack: e.error?.stack || "" }) }).catch(() => {}));
+
+// This page only collects the job and follows the run; the work is src/run-video.ps1, started by src/server.mjs, whose
+// @@EVENT lines this page polls. Scenes are angles of the library (data/angles.json), in camera order.
+const fileUrl = (path) => `/file?path=${encodeURIComponent(path)}`;
+// v3: scene lengths suggested per angle (Tự động); a page saved before starts on the 1-minute set with them.
+const KEY = "grok-video:make:v3";
+let DATA = { settings: { seconds: [6, 10, 15], resolutions: ["720p"], defaultScenes: [], maxScenes: 12 }, angles: [], angleGroups: [] };
+const make = Object.assign({ photo: "", model: "", name: "", scenes: null, seconds: "auto", resolution: "720p", aspect: "9:16" }, store.get(KEY, {}));
+const run = { since: 0, running: false, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [] };
+const persist = () => store.set(KEY, make);
+const angleOf = (id) => DATA.angles.find((a) => a.id === id);
+
+const BOXES = [["photoBox", "photo", "Ảnh sản phẩm", "Bấm, kéo ảnh vào, hoặc rê chuột vào đây rồi Ctrl+V"], ["modelBox", "model", "Người mẫu (tuỳ chọn)", "Mở đầu video bằng người mẫu giới thiệu sản phẩm. Bấm, kéo ảnh vào hoặc Ctrl+V"]];
+function renderPhotos() {
+  for (const [box, key, title, hint] of BOXES) {
+    const node = $(box);
+    node.replaceChildren();
+    if (make[key]) {
+      const x = el("button", { className: "btn x", type: "button", textContent: "×", title: "Bỏ ảnh" });
+      x.onclick = (e) => { e.stopPropagation(); make[key] = ""; persist(); renderPhotos(); renderScenes(); };
+      node.append(el("img", { src: fileUrl(make[key]), alt: title }), x);
+    } else node.append(Object.assign(el("span"), { innerHTML: `<b>${title}</b>${hint}` }));
+  }
+}
+let pickFor = "photo";
+async function upload(file, key) {
+  if (!file || !/^image\/(png|jpeg|webp)$/.test(file.type)) return toast("Chọn ảnh PNG, JPEG hoặc WebP");
+  const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name || "anh.png")}`, { method: "POST", body: file }).catch(() => null);
+  const body = r && (await r.json().catch(() => ({})));
+  if (!r?.ok) return toast(body?.error || "Không tải ảnh lên được");
+  make[key] = body.path; persist(); renderPhotos(); renderScenes();
+}
+for (const [box, key] of BOXES) {
+  const node = $(box);
+  node.onclick = () => { pickFor = key; $("picker").value = ""; $("picker").click(); };
+  node.addEventListener("dragover", (e) => { e.preventDefault(); node.classList.add("dropping"); });
+  node.addEventListener("dragleave", () => node.classList.remove("dropping"));
+  node.addEventListener("drop", (e) => { e.preventDefault(); node.classList.remove("dropping"); upload(e.dataTransfer.files[0], key); });
+}
+$("picker").onchange = (e) => upload(e.target.files[0], pickFor);
+// Ctrl+V: into the box under the mouse or focused; elsewhere, into the product box while it is empty, else the model's.
+// A screenshot comes as a file, an image copied from a page as an item.
+let pasteInto = "";
+for (const [box, key] of BOXES) {
+  const node = $(box);
+  node.addEventListener("mouseenter", () => (pasteInto = key));
+  node.addEventListener("mouseleave", () => { if (document.activeElement !== node) pasteInto = ""; });
+  node.addEventListener("focus", () => (pasteInto = key));
+  node.addEventListener("blur", () => (pasteInto = ""));
+}
+document.addEventListener("paste", (e) => {
+  if (e.target.closest?.("input, textarea")) return;
+  const f = [...e.clipboardData.items].find((i) => i.kind === "file" && i.type.startsWith("image/"))?.getAsFile();
+  if (!f) return;
+  e.preventDefault();
+  upload(f, pasteInto || (make.photo ? "model" : "photo"));
+});
+
+function renderScenes() {
+  const first = el("div", { className: "scene fixed" });
+  first.append(el("span", { textContent: "0" }), el("span", { className: "name", textContent: make.model ? "Mở đầu: người mẫu giới thiệu (góc ảnh gốc)" : "Mở đầu: góc ảnh gốc" }));
+  $("scenes").replaceChildren(first, ...make.scenes.map((id, i) => {
+    const angle = angleOf(id);
+    const row = el("div", { className: "scene" });
+    const button = (text, title, onclick, disabled = false) => Object.assign(el("button", { className: "btn", type: "button", textContent: text, title, disabled }), { onclick });
+    const move = (to) => { const s = make.scenes; [s[i], s[to]] = [s[to], s[i]]; persist(); renderScenes(); };
+    row.append(
+      el("span", { textContent: i + 1 }),
+      el("span", { className: "name", textContent: angle ? `${angle.label}${angle.hidden_side ? " (mặt khuất, phải đoán)" : ""}` : id, title: angle?.description || "" }),
+      el("span", { className: "muted", textContent: `${secondsOf(id)}s` }),
+      button("↑", "Lên", () => move(i - 1), i === 0),
+      button("↓", "Xuống", () => move(i + 1), i === make.scenes.length - 1),
+      button("×", "Bỏ cảnh", () => { make.scenes.splice(i, 1); persist(); renderScenes(); }),
+    );
+    return row;
+  }));
+  renderTotal();
+}
+function renderSettings() {
+  const seg = (id, values, key, fmt) => $(id).replaceChildren(...values.map((v) => {
+    const b = el("button", { type: "button", textContent: fmt(v) });
+    b.setAttribute("aria-pressed", v === make[key]);
+    b.onclick = () => { make[key] = v; persist(); renderSettings(); renderScenes(); };
+    return b;
+  }));
+  seg("seconds", ["auto", ...DATA.settings.seconds], "seconds", (v) => (v === "auto" ? "Tự động" : `${v}s`));
+  seg("resolution", DATA.settings.resolutions, "resolution", (v) => v);
+  seg("aspect", DATA.settings.aspects, "aspect", (v) => v);
+}
+// A scene's length: the one chosen for all, or (Tự động) what data/video.json suggests for the angle's kind of move, as
+// the run computes it (src/video.ps1 Test-VideoJob).
+function secondsOf(id) {
+  if (make.seconds !== "auto") return make.seconds;
+  const s = DATA.settings;
+  return s.secondsByAngle?.[id] ?? s.secondsByGroup?.[angleOf(id)?.group] ?? 10;
+}
+const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+function renderTotal() {
+  const n = make.scenes.length;
+  const total = make.scenes.reduce((sum, id) => sum + secondsOf(id), 0);
+  const images = 1 + make.scenes.filter((id) => (DATA.settings.keyframeAngles || []).includes(id)).length;
+  const wait = Math.round(images * 0.5 + n * (DATA.settings.minutesPerScene || 1.5));
+  $("total").replaceChildren(el("b", { textContent: `Video dự kiến ${clock(total)}` }), ` · ${n} cảnh · chờ tạo khoảng ${wait} phút (${images} ảnh + ${n} video Grok)`);
+}
+$("add").onclick = () => {
+  if (make.scenes.length >= DATA.settings.maxScenes) return toast(`Tối đa ${DATA.settings.maxScenes} cảnh`);
+  make.scenes.push($("addAngle").value); persist(); renderScenes();
+  $("scenes").scrollTop = $("scenes").scrollHeight;
+};
+$("name").value = make.name;
+$("name").oninput = (e) => { make.name = e.target.value; persist(); };
+
+// The run, as the events say.
+function onEvent(e) {
+  if (e.kind === "start") { run.folder = e.folder; run.total = e.scenes; }
+  else if (e.kind === "frame") run.steps[`f${e.index}`] = e;
+  else if (e.kind === "clip") run.steps[`c${e.index}`] = e;
+  else if (e.kind === "final") run.final = e;
+  else if (e.kind === "warning") run.warnings.push(e.message);
+  else if (e.kind === "done") run.summary = e;
+  else if (e.kind === "fatal") run.fatal = e.message;
+}
+function renderRun() {
+  $("run").disabled = run.running; $("stop").disabled = !run.running; $("open").disabled = !run.folder;
+  const n = run.total ?? make.scenes.length;
+  const rows = [];
+  const line = (key, title, frame) => {
+    const e = run.steps[key];
+    const row = el("div", { className: "step" });
+    const thumb = e?.file && frame ? el("img", { className: "thumb", src: fileUrl(e.file) }) : el("div", { className: "thumb" });
+    const text = el("div");
+    const state = el("span", { className: e ? (e.ok ? "ok" : "bad") : "muted", textContent: !e ? (run.running ? "chờ" : "") : e.ok ? "xong" : "lỗi" });
+    text.append(el("div", { textContent: `${title}${e?.label ? ": " + e.label : ""} ` }));
+    text.firstChild.append(state);
+    if (e?.message) text.append(el("div", { className: "msg", textContent: e.message, title: e.message }));
+    row.append(thumb, text);
+    rows.push(row);
+  };
+  if (run.running || run.summary || run.fatal) {
+    for (let i = 0; i <= n; i++) line(`f${i}`, `Khung ${i}`, true);
+    for (let i = 1; i <= n; i++) line(`c${i}`, `Video cảnh ${i}`, false);
+  }
+  for (const w of run.warnings) rows.push(el("div", { className: "warn small", textContent: w }));
+  if (run.fatal) rows.push(el("div", { className: "bad", textContent: run.fatal }));
+  if (run.summary?.message) rows.push(el("div", { className: "warn", textContent: run.summary.message }));
+  $("steps").replaceChildren(...rows);
+  const done = Object.values(run.steps).filter((s) => s.ok).length;
+  $("status").textContent = run.running ? `đang chạy · ${done}/${2 * n + 1} bước` : run.summary ? (run.summary.ok ? "xong" : "chưa ra video") : "";
+  const final = $("final");
+  if (run.final && final.dataset.file !== run.final.file) {
+    final.dataset.file = run.final.file;
+    final.replaceChildren(el("div", { className: "ok", textContent: `Video ${run.final.seconds}s, ${run.final.width}×${run.final.height}` }), el("video", { src: fileUrl(run.final.file), controls: true, playsInline: true }));
+  } else if (!run.final) { final.dataset.file = ""; final.replaceChildren(); }
+}
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    for (;;) {
+      const r = await fetch(`/api/run?since=${run.since}`).then((x) => x.json());
+      r.events.forEach(onEvent);
+      run.since = r.next; run.running = r.running; run.folder = r.folder || run.folder;
+      renderRun();
+      if (!r.running) break;
+      await new Promise((done) => setTimeout(done, 1500));
+    }
+  } catch { run.running = false; renderRun(); }
+  polling = false;
+}
+$("run").onclick = async () => {
+  if (!make.photo) return toast("Thêm ảnh sản phẩm");
+  if (!make.name.trim()) { $("name").focus(); return toast("Điền tên sản phẩm"); }
+  if (!make.scenes.length) return toast("Thêm ít nhất một cảnh");
+  const job = { product: make.name.trim(), photo: make.photo, model: make.model, scenes: make.scenes, seconds: make.seconds, resolution: make.resolution, aspect: make.aspect, audio: false };
+  Object.assign(run, { since: 0, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], total: make.scenes.length });
+  const r = await fetch("/api/run", { method: "POST", body: JSON.stringify(job) }).catch(() => null);
+  const body = r && (await r.json().catch(() => ({})));
+  if (!r?.ok) return toast(body?.error || "Không bắt đầu được. Mở Grok Video từ Tools Hub.");
+  run.running = true; renderRun(); poll();
+};
+$("stop").onclick = async () => { await fetch("/api/stop", { method: "POST" }).catch(() => {}); toast("Đang dừng…"); };
+$("open").onclick = () => fetch("/api/open-folder", { method: "POST" }).catch(() => {});
+
+fetch("/api/data").then((r) => r.json()).then((data) => {
+  DATA = data;
+  if (!Array.isArray(make.scenes)) make.scenes = [...data.settings.defaultScenes];
+  make.scenes = make.scenes.filter(angleOf);
+  if (make.seconds !== "auto" && !data.settings.seconds.includes(make.seconds)) make.seconds = "auto";
+  if (!data.settings.resolutions.includes(make.resolution)) make.resolution = data.settings.defaultResolution;
+  if (!data.settings.aspects.includes(make.aspect)) make.aspect = data.settings.defaultAspect;
+  $("addAngle").replaceChildren(...data.angleGroups.map((g) => {
+    const group = el("optgroup", { label: g.label });
+    group.append(...data.angles.filter((a) => a.group === g.id).map((a) => el("option", { value: a.id, textContent: a.label })));
+    return group;
+  }));
+  renderPhotos(); renderSettings(); renderScenes(); renderRun(); poll();
+}, () => toast("Không đọc được dữ liệu. Mở Grok Video từ Tools Hub."));
+
+</script>
+</body>
+</html>

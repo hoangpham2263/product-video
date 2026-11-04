@@ -1,0 +1,18 @@
+# Push a tag like v1.0.0 to publish a Release; installed apps offer it in Cập nhật.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # One fixed asset name, so releases/latest/download/product-review.zip always works.
+      - run: |
+          git archive --format=zip --prefix=product-review/ -o product-review.zip "$GITHUB_REF_NAME"
+          gh release create "$GITHUB_REF_NAME" product-review.zip --generate-notes --title "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,69 @@
+{
+  "seconds": [
+    6,
+    10,
+    15
+  ],
+  "resolutions": [
+    "480p",
+    "720p",
+    "1080p"
+  ],
+  "defaultResolution": "720p",
+  "aspects": [
+    "9:16",
+    "16:9",
+    "1:1"
+  ],
+  "defaultAspect": "9:16",
+  "maxScenes": 12,
+  "note": "Một vòng quanh sản phẩm rồi đi dần vào chi tiết, mỗi cảnh nối liền cảnh trước: ảnh gốc → nghiêng trái → cao → nghiêng phải → thấp → trung cảnh → cận chi tiết. Cảnh cận để cuối: lùi ra từ cận cảnh làm Grok méo sản phẩm. 6 cảnh x 10 giây = 1 phút.",
+  "defaultScenes": [
+    "three-quarter-left",
+    "high",
+    "three-quarter-right",
+    "low",
+    "medium",
+    "detail"
+  ],
+  "keyframeNote": "Góc có khung đích tạo bằng Grok ảnh (thử 02/11/2026: Grok sửa ảnh làm tốt cận cảnh và góc cao; với góc xoay quanh, góc thấp, toàn phòng nó giữ nguyên góc gốc hoặc làm sai sản phẩm). Góc khác: model video tự đi máy từ khung cuối của cảnh trước.",
+  "keyframeAngles": [
+    "medium",
+    "close-up",
+    "detail",
+    "high",
+    "overhead"
+  ],
+  "closeNote": "Sau một cảnh cận, Grok chỉ thấy một mảng sản phẩm và tự bịa phần còn lại (thử 02/11/2026: thành một đồ khác). Cảnh tiếp theo không có khung đích riêng thì kết thúc ở khung 0: máy lùi ra để lộ toàn bộ sản phẩm.",
+  "closeAngles": [
+    "medium",
+    "close-up",
+    "detail"
+  ],
+  "wideNote": "Góc rộng không có khung đích thì kết thúc ở khung 0 (căn phòng thật): thử 02/11/2026, cảnh toàn phòng tự đi máy làm ra một căn phòng khác.",
+  "wideAngles": [
+    "room-wide",
+    "negative-space"
+  ],
+  "secondsNote": "Mỗi cảnh tự có độ dài đề xuất theo loại chuyển động của góc: đi máy xa (xoay quanh, đổi độ cao, toàn phòng) 10 giây, đi ngắn (cận, chi tiết, bố cục) 6 giây. Người dùng có thể đặt mọi cảnh bằng nhau (6/10/15). Grok chỉ làm 6, 10 hoặc 15 giây.",
+  "secondsByGroup": {
+    "direction": 10,
+    "elevation": 10,
+    "framing": 6,
+    "composition": 6,
+    "application": 10,
+    "role": 10
+  },
+  "secondsByAngle": {
+    "room-wide": 10
+  },
+  "minutesPerScene": 1.5,
+  "motionNote": "Máy luôn đi nhẹ: cảnh không có khung đích chỉ nghiêng một cung nhỏ 15-20 độ hoặc đẩy/kéo/lia, ở phía trước. Grok chỉ có một ảnh: máy xoay càng xa sang hông/sau, nó càng tự vẽ thêm phòng (thử 02/11/2026: sofa mới, cửa sổ và tranh đổi). Người dùng bỏ chế độ xoay mạnh (02/11/2026).",
+  "hiddenAnglesNote": "Góc phải quay ra sau hoặc sang hông 90 độ: không cho chọn.",
+  "hiddenAngles": [
+    "rear",
+    "rear-three-quarter",
+    "profile-left",
+    "profile-right"
+  ]
+}

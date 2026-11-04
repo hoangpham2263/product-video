@@ -1,0 +1,8 @@
+{
+  "name": "tools-hub-bridge",
+  "private": true,
+  "type": "module",
+  "description": "Local bridge between Product Review and its Chrome extension.",
+  "scripts": { "start": "node server.mjs", "test": "node --test" },
+  "dependencies": { "ws": "8.18.0" }
+}

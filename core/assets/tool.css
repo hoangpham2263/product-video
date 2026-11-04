@@ -1,0 +1,96 @@
+/* Shared look for the tool picker and Tools Hub web tools: the same Windows 10 classic style as Product Review
+   (apps/product-review/src/mac/ui/app.css): grey control background, Segoe UI 10pt, square controls, green accent. */
+:root {
+  --control: #f0f0f0; --ink: rgb(30, 30, 30); --muted: rgb(96, 96, 96); --line: rgb(172, 172, 172);
+  --accent: rgb(40, 140, 80); --accent-dark: rgb(32, 118, 66); --surface: #fff; --hover: rgb(230, 238, 248);
+  --font: "Segoe UI", "Segoe UI Web", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+/* hidden wins over a class that sets display (.btn), e.g. "← Menu" when there is no menu to go back to. */
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--control); color: var(--ink); font: 13.33px/1.35 var(--font); -webkit-font-smoothing: antialiased; }
+/* The same frame as Product Review's window (1120 x 840 by default): 20px left, 24px right, 20px at the bottom,
+   the 64px header, then 14px to the first group; groups 16px apart side by side and 12px apart above and below. */
+main { padding: 0 24px 20px 20px; }
+header + * { margin-top: 14px; }
+header { display: flex; align-items: center; gap: 12px; height: 64px; }
+header img { width: 32px; height: 32px; }
+h1 { font-size: 17.33px; font-weight: 400; margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+label { display: block; color: var(--ink); margin: 12px 0 4px; }
+input, textarea, select { width: 100%; font: inherit; color: var(--ink); background: #fff; border: 1px solid #7a7a7a; border-radius: 0; padding: 4px 5px; outline: none; }
+input:hover, textarea:hover, select:hover { border-color: #171717; }
+input:focus, textarea:focus, select:focus { border-color: #0078d7; }
+/* Selects match Product Review's combo: flat, with our own chevron set in from the right edge. */
+select { height: 28px; padding: 0 28px 0 6px; cursor: pointer; background: #e1e1e1 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23444' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center; border-color: #adadad; appearance: none; -webkit-appearance: none; }
+select:hover { background-color: #e5f1fb; border-color: #0078d7; }
+select:disabled { background-color: #cccccc; border-color: #bfbfbf; color: #838383; cursor: default; }
+textarea { resize: vertical; min-height: 110px; line-height: 1.3; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.row > * { flex: 1 1 200px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 14px; font: inherit; color: #000; background: #e1e1e1; border: 1px solid #adadad; border-radius: 0; cursor: default; text-decoration: none; flex: 0 0 auto; }
+.btn:hover { background: #e5f1fb; border-color: #0078d7; }
+.btn:active { background: #cce4f7; border-color: #005499; }
+.btn:disabled { background: #cccccc; border-color: #bfbfbf; color: #838383; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.seg { display: inline-flex; flex: 0 0 auto; }
+.seg button { height: 32px; padding: 0 16px; font: inherit; color: #000; background: #e1e1e1; border: 1px solid #adadad; border-radius: 0; margin-right: -1px; cursor: default; }
+.seg button:hover { background: #e5f1fb; border-color: #0078d7; position: relative; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
+/* Rows: white boxes with a grey border, like Product Review's link list (.qrow). */
+.card { background: var(--surface); border: 1px solid var(--line); padding: 10px 12px; }
+.list { display: grid; gap: 8px; margin-top: 4px; }
+.list .card { cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; border-radius: 0; }
+/* A scrolling list framed like Product Review's link list: white box, dark border, the cards inside. */
+.listbox { background: #fff; border: 1px solid #000; padding: 10px; overflow-y: auto; align-content: start; }
+.listbox .card { min-height: 46px; padding: 0 14px; }
+/* Windows scrollbars, as in Product Review. */
+::-webkit-scrollbar { width: 17px; height: 17px; background: #f0f0f0; }
+::-webkit-scrollbar-thumb { background: #cdcdcd; border: 0; }
+::-webkit-scrollbar-thumb:hover { background: #a6a6a6; }
+.list .card:hover { background: var(--hover); }
+.list .card[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+pre.out { white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px solid var(--line); padding: 10px 12px; max-height: 480px; overflow: auto; margin: 8px 0 0; font: 12.5px/1.5 Consolas, ui-monospace, Menlo, monospace; user-select: text; }
+.note { background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; color: var(--muted); }
+details summary { cursor: default; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: rgb(30, 30, 30); color: #fff; padding: 8px 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.show { opacity: 1; }
+/* Header: [← Menu] Title … [Tải lại] [Cấu hình] [Cập nhật], at the top right as in Product Review (24px from the edge). */
+header .reload { margin-left: auto; }
+header .config { margin-left: auto; }
+header .reload + .config { margin-left: 0; }
+header .update { margin-left: auto; }
+header .config + .update { margin-left: 0; }
+/* Menu: whether Cấu hình is done (hub.js), above the tools; the tools need every step done. */
+.setup-status { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 14px; margin-bottom: 12px; background: var(--surface); border: 1px solid var(--line); }
+.setup-status .mark { font-size: 15px; width: 18px; text-align: center; }
+.setup-status .text { flex: 1; min-width: 0; }
+.setup-status.ok { border-color: var(--accent); }
+.setup-status.ok .mark { color: darkgreen; }
+.setup-status.todo { border-color: #b06000; background: #fff8ef; }
+.setup-status.todo .mark { color: #b06000; }
+.setup-status .btn { height: 28px; }
+/* Cấu hình page (core/setup/page.html): Chép mã beside Codex's one-time code. */
+.copy-code { margin: 0 2px; padding: 1px 8px; font-size: 12px; min-height: 0; height: auto; }
+/* Dialog (Cập nhật), like Product Review's small windows. */
+.shade { position: fixed; inset: 0; background: rgba(0, 0, 0, .25); display: flex; align-items: center; justify-content: center; }
+.dialog { width: 440px; background: var(--control); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .2); padding: 20px; }
+.dialog .status { min-height: 44px; }
+.dialog .bar { height: 10px; margin: 8px 0 20px; background: #e6e6e6; border: 1px solid #bcbcbc; overflow: hidden; }
+.dialog .bar > span { display: block; width: 22%; height: 100%; background: #06b025; animation: hub-marquee 2.2s linear infinite; }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 10px; }
+.dialog .btn[hidden] { display: none; }
+@keyframes hub-marquee { from { transform: translateX(-100%); } to { transform: translateX(460%); } }
+/* Layout like Product Review's window: bordered groups with a heading inside (Link sản phẩm & ảnh, Thao tác…),
+   the main group on the left, "Thao tác" in a 224px column on the right, wide groups below; 20px between groups. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 224px; gap: 12px 16px; align-items: stretch; }
+.group { position: relative; background: var(--control); border: 1px solid var(--line); padding: 38px 14px 14px; min-width: 0; }
+.group.wide { grid-column: 1 / -1; }
+.group > h2 { position: absolute; top: 10px; left: 14px; margin: 0; font-size: 13.33px; font-weight: 400; color: var(--ink); }
+.group > label:first-of-type { margin-top: 0; }
+.actions-col { display: flex; flex-direction: column; gap: 8px; }
+.actions-col .btn { width: 100%; }
+.actions-col label { margin: 4px 0 0; }

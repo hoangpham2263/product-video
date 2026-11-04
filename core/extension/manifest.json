@@ -1,0 +1,96 @@
+{
+  "manifest_version": 3,
+  "name": "Product Review",
+  "version": "1.0.12",
+  "description": "Cầu nối local của Product Review: nhận việc từ các tool (tạo ảnh, video, viết chữ), làm trong tab Google Flow, Gemini, ChatGPT, Grok đang đăng nhập và trả kết quả về máy.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "alarms",
+    "debugger",
+    "cookies",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://flow.google.com/*",
+    "https://flow-content.google/*",
+    "https://gemini.google.com/*",
+    "https://accounts.google.com/*",
+    "https://*.google.com/*",
+    "https://grok.com/*",
+    "https://assets.grok.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "sites/common.js",
+        "sites/chatgpt.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://flow.google.com/*"
+      ],
+      "js": [
+        "sites/common.js",
+        "sites/flow.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "sites/common.js",
+        "sites/gemini.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://grok.com/*"
+      ],
+      "js": [
+        "sites/common.js",
+        "sites/grok.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://grok.com/*"
+      ],
+      "js": [
+        "sites/grok-main.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "action": {
+    "default_title": "Product Review",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

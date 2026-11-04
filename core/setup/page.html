@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cấu hình</title>
+<link rel="stylesheet" href="/setup/tool.css">
+<script src="/setup/page.js" defer></script>
+<style>
+/* Cấu hình as a page of its own (core/setup/config-api.mjs serves it to the menu and every tool's server): each AI
+   with the account it is signed in to and what it is used for, then what has to be installed, then Model AI. */
+.setup-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.items { display: grid; gap: 8px; }
+.item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; background: var(--surface); border: 1px solid var(--line); padding: 10px 12px; }
+.item .mark { font-size: 15px; color: var(--muted); line-height: 20px; }
+.item .body { min-width: 0; display: grid; gap: 2px; }
+.item .name { line-height: 20px; }
+.item .account { overflow-wrap: anywhere; }
+.item .account.none { color: var(--muted); }
+.item .account-pick { max-width: 100%; height: 28px; margin-top: 2px; }
+.item .detail, .item .uses { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.item .side { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.item .side .btn { min-width: 110px; }
+.item .err { color: #b06000; font-size: 12px; }
+.ai-model { display: grid; grid-template-columns: minmax(0, 1fr) 188px; gap: 6px 10px; }
+.ai-model > span { grid-column: 1 / -1; }
+header .again { margin-left: auto; }
+/* Tài khoản AI: the AIs side by side in one row, each a short card (name, account, state, buttons). */
+#ai { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ai .item { grid-template-columns: 22px minmax(0, 1fr); align-content: start; }
+#ai .item .side { grid-column: 2; flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
+#ai .item .side .btn { min-width: 0; height: 28px; padding: 0 10px; }
+@media (max-width: 860px) { #ai { grid-template-columns: minmax(0, 1fr); } }
+.note-line { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+/* Lượt dùng AI: one row per AI and account. */
+.usage { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); }
+.usage th, .usage td { text-align: left; font-weight: 400; padding: 6px 10px; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+.usage th { color: var(--muted); font-size: 12px; }
+.usage td.num { white-space: nowrap; }
+.usage .sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.usage .warn { color: #b06000; }
+.usage-wrap { overflow-x: auto; }
+@media (max-width: 760px) { .setup-page { grid-template-columns: minmax(0, 1fr); } }
+/* Narrow window: the buttons go under the text, side by side. */
+@media (max-width: 600px) { .item { grid-template-columns: 22px minmax(0, 1fr); } .item .side { grid-column: 2; flex-direction: row; flex-wrap: wrap; margin-top: 6px; } }
+</style>
+</head>
+<body>
+<main>
+  <header><button class="btn back" type="button">← Quay lại</button><h1>Cấu hình</h1><button class="btn again" type="button">Kiểm tra lại</button></header>
+  <div class="layout setup-page">
+    <section class="group wide"><h2>Tài khoản AI</h2><div class="note-line">Mỗi AI đăng nhập riêng, có thể là tài khoản khác nhau. Đổi tài khoản ngay ở đây hoặc mở trang web của AI để đăng nhập.</div><div class="items" id="ai"></div></section>
+    <section class="group"><h2>Cài đặt</h2><div class="items" id="base"></div></section>
+    <section class="group"><h2>Model AI của Codex</h2>
+      <div class="ai-model"><span class="muted">Model nhẹ, mức thấp tốn ít token hơn.</span><select class="model"></select><select class="effort"></select></div>
+    </section>
+    <section class="group wide"><h2>Lượt dùng AI</h2><div class="note-line">Mọi lần gọi AI của các tool trên máy này, theo từng tài khoản. Gemini, Flow, ChatGPT không cho biết hạn mức: lỗi Hết lượt mà sau đó chưa chạy được lần nào thì tài khoản đó đang hết lượt.</div><div class="usage-wrap"><table class="usage"><thead><tr><th>AI · tài khoản</th><th>Hôm nay</th><th>7 ngày</th><th>30 ngày</th><th>Lỗi gần nhất</th></tr></thead><tbody id="usage"><tr><td colspan="5" class="sub">Đang đọc…</td></tr></tbody></table></div></section>
+  </div>
+</main>
+</body>
+</html>
