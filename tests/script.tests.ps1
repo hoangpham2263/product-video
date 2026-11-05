@@ -79,26 +79,22 @@ Assert-That 'Timing: presenter lines over one clip, missing at the ends, or in a
     ($p -match 'quá một clip 6 s').Count -eq 1 -and ($p -match 'Câu kết').Count -eq 1 -and $v.Count -eq 1 -and $v[0] -match 'chỉ có lời đọc'
 }
 
-# --- Get-GrenheimBrand ---
-$real = Join-Path $script:ScriptBrandProject 'project.md'
-if (Test-Path -LiteralPath $real) {
-    Assert-That 'Brand: tagline, website, facts and voice from the GRENHEIM notes' {
-        $b = Get-GrenheimBrand
-        $b.name -eq 'GRENHEIM' -and $b.tagline -eq 'Nature''s beauty, shaped by artisan hands.' -and $b.website -eq 'https://grenheim.com/' -and
-        $b.facts -contains 'Natural wood furniture for the home' -and $b.facts -contains 'Free shipping across the US and Puerto Rico' -and
-        $b.facts -contains '1-year warranty against manufacturing defects' -and @($b.facts -match 'skilled craftspeople').Count -eq 1 -and
-        (@($b.voice) -join ', ') -match '^warm, natural'
-    }
-} else { Write-Host "skip Brand: the GRENHEIM notes are not on this machine ($real)" }
+# --- Get-BrandFacts --- (data/brand/brand.json "script", shipped with the app)
+Assert-That 'Brand: name, tagline, website, facts and voice from data/brand/brand.json' {
+    $b = Get-BrandFacts
+    $b.name -eq 'GRENHEIM' -and $b.tagline -eq 'Nature''s beauty, shaped by artisan hands.' -and $b.website -eq 'https://grenheim.com/' -and
+    $b.facts -contains 'Natural wood furniture for the home' -and $b.facts -contains 'Free shipping across the US and Puerto Rico' -and
+    $b.facts -contains '1-year warranty against manufacturing defects' -and @($b.facts -match 'skilled craftspeople').Count -eq 1 -and
+    (@($b.voice) -join ', ') -match '^warm, natural'
+}
 $temp = Join-Path ([IO.Path]::GetTempPath()) ("pv-script-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
-    Assert-That 'Brand: an empty note drops its fact (no warranty, no shipping), nothing made up' {
-        [IO.File]::WriteAllText((Join-Path $temp 'project.md'), "# X`r`n- Tên: ACME`r`n- Website: https://acme.test/`r`n- Tagline EN: Made well.`r`n- Bảo hành:`r`n- Giao hàng: tính phí`r`n", [Text.UTF8Encoding]::new($true))
-        $b = Get-GrenheimBrand $temp
-        $b.tagline -eq 'Made well.' -and $b.website -eq 'https://acme.test/' -and @($b.facts).Count -eq 0 -and @($b.voice).Count -eq 0
-    }
-    Assert-Throws 'Brand: no notes is refused' { Get-GrenheimBrand (Join-Path $temp 'none') } 'Không tìm thấy hồ sơ'
+    Assert-Throws 'Brand: no brand file is refused' { Get-BrandFacts (Join-Path $temp 'none.json') } 'Không tìm thấy thông tin thương hiệu'
+    Assert-Throws 'Brand: a brand without facts for the lines is refused' {
+        [IO.File]::WriteAllText((Join-Path $temp 'brand.json'), '{ "intro": {} }', [Text.UTF8Encoding]::new($false))
+        Get-BrandFacts (Join-Path $temp 'brand.json')
+    } 'chưa có phần script'
 
     # --- Invoke-ScriptWriter, Codex replaced by canned replies ---
     $script:Calls = @(); $script:Replies = @()

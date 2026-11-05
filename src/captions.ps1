@@ -6,11 +6,7 @@
 # Fonts and texts are copied into a work folder and ffmpeg runs there (as brand.ps1 does), so the filter never holds
 # a C: path, and a caption's quotes, colons or commas never need escaping (textfile=, expansion=none).
 
-# The app loads this after brand.ps1 (and so after ffmpeg.ps1 and plan.ps1); a test loading it alone gets them here.
-if (-not (Get-Command ConvertTo-CliArgument -ErrorAction SilentlyContinue)) { . (Join-Path (Split-Path $PSScriptRoot -Parent) 'core/ai/common.ps1') }
-if (-not (Get-Command Invoke-HubFfmpeg -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'ffmpeg.ps1') }
-if (-not (Get-Command Format-Seconds -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'plan.ps1') }
-if (-not $script:BrandFonts) { . (Join-Path $PSScriptRoot 'brand.ps1') }
+# Loaded after brand.ps1 (fonts), ffmpeg.ps1 and plan.ps1, as the run does (run-video.ps1).
 
 $script:CaptionStyle = @{
     Font      = 'light'   # a $script:BrandFonts kind (brand.ps1): the same face as the outro's lines
@@ -96,9 +92,7 @@ function Add-VideoCaptions([string]$Video, $Lines, [string]$Output, $Style = $nu
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     try {
         $utf8 = [Text.UTF8Encoding]::new($false)
-        $font = $script:BrandFonts[$look.Font] | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-        if (-not $font) { throw 'Không tìm thấy font cho phụ đề.' }
-        Copy-Item -LiteralPath $font -Destination (Join-Path $work 'caption.ttf')
+        Copy-BrandFont $look.Font $work 'caption.ttf'
         $filters = @()
         $k = 0
         foreach ($line in (Get-CaptionLines $Lines)) {

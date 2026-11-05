@@ -15,6 +15,13 @@ $script:BrandFonts = @{
     serif = @('C:\Windows\Fonts\georgia.ttf', '/System/Library/Fonts/Supplemental/Georgia.ttf', '/Library/Fonts/Georgia.ttf')
 }
 
+# A font of $script:BrandFonts (light, serif) copied into $Folder as $Name, for drawtext to find by a plain name.
+function Copy-BrandFont([string]$Kind, [string]$Folder, [string]$Name) {
+    $font = $script:BrandFonts[$Kind] | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $font) { throw "Không tìm thấy font ($Kind)." }
+    Copy-Item -LiteralPath $font -Destination (Join-Path $Folder $Name)
+}
+
 function Get-BrandFolder { Join-Path (Get-ToolRoot) 'data/brand' }
 
 # The brand, or $null when the app ships none.
@@ -33,11 +40,7 @@ function Add-BrandIntroOutro([string]$Video, [string]$Output, $Brand, [int]$Fps 
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     try {
         $utf8 = [Text.UTF8Encoding]::new($false)
-        foreach ($kind in $script:BrandFonts.Keys) {
-            $font = $script:BrandFonts[$kind] | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-            if (-not $font) { throw "Không tìm thấy font ($kind) cho outro." }
-            Copy-Item -LiteralPath $font -Destination (Join-Path $work "$kind.ttf")
-        }
+        foreach ($kind in $script:BrandFonts.Keys) { Copy-BrandFont $kind $work "$kind.ttf" }
         $intro = $Brand.intro; $outro = $Brand.outro
         Copy-Item -LiteralPath (Join-Path (Get-BrandFolder) $intro.logo) -Destination (Join-Path $work 'intro.png')
         Copy-Item -LiteralPath (Join-Path (Get-BrandFolder) $outro.logo.file) -Destination (Join-Path $work 'outro.png')

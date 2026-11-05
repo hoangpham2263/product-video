@@ -334,24 +334,25 @@ function renderSettings() {
 // card; a click switches it on or off and saves the list at once (server.mjs: workspace/lua-chon.json, which the run
 // reads through src/plan.ps1).
 const FX_LABEL = { fade: "Hoà hình", dissolve: "Lộ dần", hblur: "Nhoè ngang", fadeblack: "Qua đen", fadewhite: "Nháy trắng", fadegrays: "Qua xám", fadefast: "Hoà nhanh", fadeslow: "Hoà chậm", zoomin: "Phóng vào", radial: "Quét tròn", distance: "Tan biến", pixelize: "Vỡ điểm ảnh", circleopen: "Mở tròn", circleclose: "Đóng tròn", circlecrop: "Khung tròn", rectcrop: "Khung vuông", vertopen: "Mở dọc", vertclose: "Đóng dọc", horzopen: "Mở ngang", horzclose: "Đóng ngang", squeezeh: "Ép ngang", squeezev: "Ép dọc", diagtl: "Chéo từ trên trái", diagtr: "Chéo từ trên phải", diagbl: "Chéo từ dưới trái", diagbr: "Chéo từ dưới phải", hlslice: "Lát ngang sang trái", hrslice: "Lát ngang sang phải", vuslice: "Lát dọc lên", vdslice: "Lát dọc xuống", wipetl: "Gạt góc trên trái", wipetr: "Gạt góc trên phải", wipebl: "Gạt góc dưới trái", wipebr: "Gạt góc dưới phải",smoothleft: "Lướt trái", smoothright: "Lướt phải", smoothup: "Lướt lên", smoothdown: "Lướt xuống", slideleft: "Trượt trái", slideright: "Trượt phải", slideup: "Trượt lên", slidedown: "Trượt xuống", wipeleft: "Gạt trái", wiperight: "Gạt phải", wipeup: "Gạt lên", wipedown: "Gạt xuống" };
-async function saveChoice(list, off) {
-  const r = await fetch("/api/choices", { method: "POST", body: JSON.stringify({ list, off }) }).catch(() => null);
+// One switch is sent (server.mjs applies it to the list as saved now); the list it answers with redraws every card of
+// that list, so a page open for long shows what is really saved.
+const cardShows = { bannedTransitions: [], bannedAngles: [] };
+async function saveChoice(list, id, off) {
+  const r = await fetch("/api/choices", { method: "POST", body: JSON.stringify({ list, id, off }) }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));
   if (!r?.ok) { toast(body?.error || "Chưa lưu được."); return false; }
   DATA.settings[list] = body[list];
+  cardShows[list].forEach((show) => show());
   return true;
 }
-// One card: the sample, its name and whether it is used; a click switches it and saves the whole list.
+// One card: the sample, its name and whether it is used; a click switches it.
 function choiceCard(list, id, media, name, sub, onSaved) {
   const card = el("button", { type: "button", className: "card", title: sub || name });
   const state = el("div", { className: "state" });
   const show = () => { const off = (DATA.settings[list] || []).includes(id); card.classList.toggle("off", off); state.textContent = off ? "Không dùng" : "Đang dùng"; };
   card.append(media, el("div", { className: "name", textContent: name }), el("div", { className: "sub", textContent: sub }), state);
-  card.onclick = async () => {
-    const off = new Set(DATA.settings[list] || []);
-    off.has(id) ? off.delete(id) : off.add(id);
-    if (await saveChoice(list, [...off])) { show(); onSaved(); }
-  };
+  card.onclick = async () => { if (await saveChoice(list, id, !card.classList.contains("off"))) onSaved(); };
+  cardShows[list].push(show);
   show();
   return card;
 }

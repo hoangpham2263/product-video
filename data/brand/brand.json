@@ -1,5 +1,5 @@
 {
-  "note": "Intro/outro GRENHEIM, chốt 04/11/2026; nằm trong app (data/brand/), không để ở workspace/. Số đo theo khung 720x1280: ngang nhân theo chiều rộng thật, dọc và cỡ chữ theo chiều cao thật. Chữ nằm trên mốc 65% chiều cao (vùng an toàn Reels/TikTok). Intro: logo TRẮNG rõ hẳn (logo-intro.png), tâm ở 2/5 chiều cao, có bóng đen mềm ôm sát nét logo kiểu text-shadow (shadow: opacity, blur). Người dùng đã bác logo mờ, quầng sáng tròn sau logo và đĩa kính mờ (04/11/2026).",
+  "note": "Intro/outro GRENHEIM, chốt 04/11/2026; nằm trong app (data/brand/), không để ở workspace/. Số đo theo khung 720x1280: ngang nhân theo chiều rộng thật, dọc và cỡ chữ theo chiều cao thật. Chữ nằm trên mốc 65% chiều cao (vùng an toàn Reels/TikTok). Intro: logo TRẮNG rõ hẳn (logo-intro.png), tâm ở 2/5 chiều cao, có bóng đen mềm ôm sát nét logo kiểu text-shadow (shadow: opacity, blur). Người dùng đã bác logo mờ, quầng sáng tròn sau logo và đĩa kính mờ (04/11/2026). script: dữ kiện thật của thương hiệu cho lời thoại/phụ đề (lấy từ project.md của grenheim-skills 04/11/2026); chỉ được nói những điều này.",
   "intro": {
     "logo": "logo-intro.png",
     "width": 190,
@@ -61,6 +61,23 @@
         "y": 780,
         "start": 1.4
       }
+    ]
+  },
+  "script": {
+    "name": "GRENHEIM",
+    "tagline": "Nature's beauty, shaped by artisan hands.",
+    "website": "https://grenheim.com/",
+    "facts": [
+      "Natural wood furniture for the home",
+      "We work with skilled craftspeople who care about the pieces they make, respecting the character of the wood and paying attention to the places you'll touch and use every day.",
+      "Free shipping across the US and Puerto Rico",
+      "1-year warranty against manufacturing defects"
+    ],
+    "voice": [
+      "warm",
+      "natural",
+      "caring, attentive to detail",
+      "plain and easy to follow"
     ]
   }
 }

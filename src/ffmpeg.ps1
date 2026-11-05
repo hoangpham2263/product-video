@@ -67,27 +67,3 @@ function Get-HubVideoInfo([string]$Path) {
         Seconds = $(if ($time.Success) { [int]$time.Groups[1].Value * 3600 + [int]$time.Groups[2].Value * 60 + [double]::Parse($time.Groups[3].Value, [Globalization.CultureInfo]::InvariantCulture) } else { 0 })
     }
 }
-
-# The last frame of a clip, as a PNG: the start of the next clip when its own key frame is missing.
-function Save-HubVideoLastFrame([string]$Video, [string]$Png) {
-    Assert-HubFfmpeg (Invoke-HubFfmpeg @('-y', '-hide_banner', '-sseof', '-0.5', '-i', $Video, '-update', '1', $Png)) 'lấy được khung cuối'
-    if (-not (Test-Path -LiteralPath $Png)) { throw "ffmpeg không lấy được khung cuối của $Video" }
-}
-
-# Clips that follow each other (each one starts on the frame the one before ended on) as one video: the first frame of
-# every later clip is dropped, so that shared frame shows once and the cut does not stutter. All clips are brought to
-# the first one's size at $Fps; sound is left out (each clip has its own). H.264, ready to post.
-function Join-HubVideoClips([string[]]$Clips, [string]$Output, [int]$Fps = 30) {
-    $first = Get-HubVideoInfo $Clips[0]
-    $w = $first.Width - ($first.Width % 2); $h = $first.Height - ($first.Height % 2)
-    $inputs = @(); $chains = @(); $labels = ''
-    for ($i = 0; $i -lt $Clips.Count; $i++) {
-        $inputs += @('-i', $Clips[$i])
-        $trim = if ($i -gt 0) { 'trim=start_frame=1,setpts=PTS-STARTPTS,' } else { '' }
-        $chains += "[${i}:v]${trim}fps=$Fps,scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v$i]"
-        $labels += "[v$i]"
-    }
-    $graph = ($chains -join ';') + ";${labels}concat=n=$($Clips.Count):v=1:a=0[out]"
-    $arguments = @('-y', '-hide_banner') + $inputs + @('-filter_complex', $graph, '-map', '[out]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-movflags', '+faststart', '-an', $Output)
-    Assert-HubFfmpeg (Invoke-HubFfmpeg $arguments) 'ghép được video'
-}

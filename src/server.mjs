@@ -52,15 +52,21 @@ const pageData = async () => {
 
 // ----- Lựa chọn: the transitions and angles the user switched off -----
 // Kept in workspace/lua-chon.json { bannedTransitions, bannedAngles } (an update keeps workspace/); a list not saved yet
-// is data/video.json's. src/plan.ps1 reads the same file. The Hiệu ứng and Góc máy pages save one list at a time.
+// is data/video.json's. src/plan.ps1 reads the same file. The Hiệu ứng and Góc máy pages send one switch at a time
+// ({ list, id, off }), applied here to the list as it is now: a page open for long cannot write back an old list
+// (04/11/2026 one did, and turned zoomin back on).
 const choicesFile = join(workspace, "lua-chon.json");
 const readChoices = async () => (existsSync(choicesFile) ? await readJson(choicesFile) : {});
-async function saveChoice({ list, off }) {
-  const known = list === "bannedTransitions" ? (await readJson(join(root, "data", "video.json"))).transitionNames
+async function saveChoice({ list, id, off }) {
+  const settings = await readJson(join(root, "data", "video.json"));
+  const known = list === "bannedTransitions" ? settings.transitionNames
     : list === "bannedAngles" ? (await readJson(join(root, "data", "angles.json"))).angles.map((a) => a.id) : null;
   if (!known) throw new Error("Danh sách không hợp lệ.");
+  if (!known.includes(String(id))) throw new Error(`Không có: ${id}.`);
   const choices = await readChoices();
-  choices[list] = [...new Set([].concat(off || []).map(String))].filter((n) => known.includes(n));
+  const now = new Set([].concat(choices[list] ?? settings[list] ?? []).map(String));
+  off ? now.add(String(id)) : now.delete(String(id));
+  choices[list] = [...now].filter((n) => known.includes(n));
   await writeFile(choicesFile, JSON.stringify(choices, null, 2) + "\n", "utf8");
   return { [list]: choices[list] };
 }

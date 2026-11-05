@@ -15,7 +15,7 @@ function Write-Utf8([string]$Path, [string]$Text) {
     [IO.File]::WriteAllText($Path, $Text, [Text.UTF8Encoding]::new($false))
 }
 $script:Invariant = [Globalization.CultureInfo]::InvariantCulture
-function Format-Seconds([double]$Value) { $Value.ToString('0.###', $script:Invariant) }
+function Format-Seconds([double]$Value, [string]$Format = '0.###') { $Value.ToString($Format, $script:Invariant) }
 # data/video.json, with the user's own choices when they saved some: the transitions and angles not to use
 # (workspace/lua-chon.json { bannedTransitions, bannedAngles }, from the window's Hiệu ứng and Góc máy pages; an update
 # keeps workspace/).

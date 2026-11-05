@@ -10,10 +10,8 @@ $script:ScriptWordsPerSecond = 2.5
 # A presenter line is spoken inside one Grok clip; the app films 6 s clips (data/video.json grokSeconds), and a line
 # running past its clip is cut off mid-word.
 $script:ScriptPresenterSeconds = 6
-# Where the brand's own notes live (the GRENHEIM skills workspace); HUB_BRAND_PROJECT points elsewhere for another brand.
-$script:ScriptBrandProject = if ($env:HUB_BRAND_PROJECT) { $env:HUB_BRAND_PROJECT } else { 'C:\hoangpq\vaniecom-workspace\grenheim\grenheim-skills\project' }
-
-function Format-ScriptSeconds([double]$Value) { $Value.ToString('0.0#', [Globalization.CultureInfo]::InvariantCulture) }
+# Seconds in the prompt and the problems: always one decimal ("20.0-second").
+$script:ScriptSecondsFormat = '0.0#'
 
 # The English name of an angle, for Codex to picture the shot; the app's own labels ("as photo", "nhãn ứng dụng")
 # mean nothing to it.
@@ -46,19 +44,19 @@ function Get-ScriptTimeline($Shots) {
 # numbers, and anything else (prices, "best", "solid oak" when nobody said so) would be a claim nobody checked.
 function New-ScriptPrompt($Shots, $Brand, [string]$ProductName, [double]$Seconds, [string]$Mode = 'voice') {
     $timeline = Get-ScriptTimeline $Shots
-    $shotLines = ($timeline | ForEach-Object { "- Shot $($_.Index), $(Format-ScriptSeconds $_.Start)-$(Format-ScriptSeconds $_.End) s: $($_.View); $($_.Move)." }) -join "`r`n"
+    $shotLines = ($timeline | ForEach-Object { "- Shot $($_.Index), $(Format-Seconds $_.Start $script:ScriptSecondsFormat)-$(Format-Seconds $_.End $script:ScriptSecondsFormat) s: $($_.View); $($_.Move)." }) -join "`r`n"
     $facts = (@($Brand.facts) | Where-Object { $_ } | ForEach-Object { "- $_" }) -join "`r`n"
     if (-not $facts) { $facts = '- (none: describe only what the shots show)' }
     $voice = (@($Brand.voice) | Where-Object { $_ }) -join ', '
     $name = if ($Brand.name) { [string]$Brand.name } else { 'the brand' }
-    $wps = Format-ScriptSeconds $script:ScriptWordsPerSecond
-    $end = Format-ScriptSeconds $Seconds
-    $presenter = Format-ScriptSeconds $script:ScriptPresenterSeconds
+    $wps = Format-Seconds $script:ScriptWordsPerSecond $script:ScriptSecondsFormat
+    $end = Format-Seconds $Seconds $script:ScriptSecondsFormat
+    $presenter = Format-Seconds $script:ScriptPresenterSeconds $script:ScriptSecondsFormat
     $speakers = if ($Mode -eq 'presenter') {
         @"
 SPEAKERS: one on-camera presenter and a voiceover.
 - The FIRST line is spoken by the presenter (speaker "presenter"): it starts at or after 0 s and ends by $presenter s, so it fits inside the presenter's single $presenter-second clip.
-- The LAST line is spoken by the presenter too: it starts no earlier than $(Format-ScriptSeconds ([Math]::Max(0.0, $Seconds - $script:ScriptPresenterSeconds))) s and ends by $end s.
+- The LAST line is spoken by the presenter too: it starts no earlier than $(Format-Seconds ([Math]::Max(0.0, $Seconds - $script:ScriptPresenterSeconds)) $script:ScriptSecondsFormat) s and ends by $end s.
 - Every line in between is voiceover (speaker "voice"). No other line uses "presenter".
 "@
     } else {
@@ -98,33 +96,14 @@ OUTPUT: JSON only, no other text, in exactly this shape:
 "@
 }
 
-# The brand's verifiable facts, read from its notes (project.md, written in Vietnamese) and its English introduction.
-# A note that is empty or changes wording drops its fact rather than letting an old sentence through.
+# The brand's verifiable facts for the lines: data/brand/brand.json "script", part of the app so every install has
+# them (once read from the GRENHEIM notes on this machine, which other machines do not have). Only these may be said.
 #   { name, tagline, website, facts[], voice[] }
-function Get-GrenheimBrand([string]$Project = $script:ScriptBrandProject) {
-    $file = Join-Path $Project 'project.md'
-    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Không tìm thấy hồ sơ thương hiệu: $file. [CAUSE:SCRIPT]" }
-    $notes = @{}
-    foreach ($line in (Get-Content -LiteralPath $file -Encoding UTF8)) {
-        # "- Key: value"; the first of a key wins (Website is under Nhận diện before any other link).
-        if ($line -match '^\s*-\s*([^:]+?)\s*:\s*(.*)$' -and -not $notes.ContainsKey($Matches[1])) { $notes[$Matches[1]] = $Matches[2].Trim() }
-    }
-    $facts = @()
-    if ($notes['Ngành'] -match 'gỗ tự nhiên') { $facts += 'Natural wood furniture for the home' }
-    $intro = Join-Path $Project 'sources/brand/02-introduction-en.txt'
-    if (Test-Path -LiteralPath $intro -PathType Leaf) {
-        # The brand's own English sentence about its makers, as published.
-        $sentence = [regex]::Match((Get-Content -LiteralPath $intro -Raw -Encoding UTF8), '[^.\r\n]*skilled craftspeople[^.]*\.')
-        if ($sentence.Success) { $facts += $sentence.Value.Trim() }
-    }
-    if ($notes['Giao hàng'] -match 'miễn phí' -and $notes['Giao hàng'] -match 'Mỹ' -and $notes['Giao hàng'] -match 'Puerto Rico') { $facts += 'Free shipping across the US and Puerto Rico' }
-    if ($notes['Bảo hành'] -match '(\d+)\s*năm') { $facts += "$($Matches[1])-year warranty against manufacturing defects" }
-    $words = @{ 'ấm áp' = 'warm'; 'tự nhiên' = 'natural'; 'chăm chút' = 'caring, attentive to detail'; 'dễ hiểu' = 'plain and easy to follow' }
-    $voice = @(([string]$notes['Giọng viết']) -split ',' | ForEach-Object { $words[$_.Trim()] } | Where-Object { $_ })
-    [pscustomobject]@{
-        name = [string]$notes['Tên']; tagline = [string]$notes['Tagline EN']; website = [string]$notes['Website']
-        facts = @($facts); voice = $voice
-    }
+function Get-BrandFacts([string]$File = (Join-Path (Get-ToolRoot) 'data/brand/brand.json')) {
+    if (-not (Test-Path -LiteralPath $File -PathType Leaf)) { throw "Không tìm thấy thông tin thương hiệu: $File. [CAUSE:SCRIPT]" }
+    $facts = (Read-JsonFile $File).script
+    if (-not $facts) { throw "Thông tin thương hiệu chưa có phần script (dữ kiện cho lời thoại): $File. [CAUSE:SCRIPT]" }
+    $facts
 }
 
 # Codex's reply as lines. It sometimes wraps the JSON in ```json fences or a sentence; the outermost { } is taken.
@@ -159,7 +138,7 @@ function Get-ScriptWordCount([string]$Text) { @($Text -split '\s+' | Where-Objec
 function Test-ScriptTiming($Lines, [double]$Seconds, [double]$WordsPerSecond = 2.8, [string]$Mode = '') {
     $problems = New-Object System.Collections.Generic.List[string]
     $list = @($Lines)
-    $f = { param($v) Format-ScriptSeconds $v }
+    $f = { param($v) Format-Seconds $v $script:ScriptSecondsFormat }
     for ($i = 0; $i -lt $list.Count; $i++) {
         $line = $list[$i]; $n = $i + 1
         $start = [double]$line.start; $end = [double]$line.end

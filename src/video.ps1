@@ -111,7 +111,7 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
     $lines = @()
     if ($plan.Captions -and -not $script:Run.Abort) {
         Write-Host '  [SCRIPT] English lines' -ForegroundColor Cyan
-        try { $lines = @(Invoke-ScriptWriter $shots (Get-GrenheimBrand) $plan.Product ([double]($shots | Measure-Object Seconds -Sum).Sum) (Join-Path $logs 'kich-ban.json') 'voice') }
+        try { $lines = @(Invoke-ScriptWriter $shots (Get-BrandFacts) $plan.Product ([double]($shots | Measure-Object Seconds -Sum).Sum) (Join-Path $logs 'kich-ban.json') 'voice') }
         catch { Send-Event @{ kind = 'warning'; message = "Chưa viết được lời cho phụ đề, video không có phụ đề: $($_.Exception.Message -replace '\s*\[CAUSE:\w+\]', '')" } }
     }
 
