@@ -38,16 +38,20 @@ main { height: 100%; display: flex; flex-direction: column; }
 /* Kho: a danh mục, then its photos or videos as a grid of thumbnails. */
 .dialog.library { width: min(760px, calc(100vw - 32px)); }
 .library .top { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.library .top b { white-space: nowrap; }
+.library .top select { flex: none; width: 220px; margin: 0; }
 .library .grid { height: 380px; overflow-y: auto; background: #fff; border: 1px solid var(--line); padding: 6px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; }
 .library .grid img, .library .grid video { width: 104px; height: 104px; object-fit: contain; background: var(--control); border: 2px solid transparent; cursor: pointer; }
 .library .grid video { width: 140px; height: 180px; background: #000; }
 .library .grid img:hover, .library .grid video:hover { border-color: var(--accent); }
 .library .note { margin-top: 8px; min-height: 18px; }
-.settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; }
-.settings label { margin-top: 0; }
-.total { margin-top: 10px; font-size: 14px; }
-/* Hiệu ứng không dùng: every transition as a toggle; a struck-through one is never used. */
+/* Độ dài, Khổ, Phụ đề: on one row, each label above its select. */
+.opts { display: grid; grid-template-columns: repeat(3, 180px); gap: 12px; margin-top: 12px; }
+.opts label { margin: 0 0 4px; }
+.opts select { width: 100%; margin: 0; }
+/* Dialogs: the buttons kept clear of what is above them. */
 .shade { z-index: 20; } /* above the photo boxes' own buttons */
+.dialog .actions { margin-top: 12px; }
 /* Hiệu ứng, Góc máy: every transition or angle as a card with its sample; its Dùng checkbox switches it on or off. */
 .cards-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .card[hidden], .cards h3[hidden] { display: none; }
@@ -63,7 +67,6 @@ main { height: 100%; display: flex; flex-direction: column; }
 .card.off { border-color: rgb(176, 0, 0); }
 .card.off video, .card.off img { filter: grayscale(.9); }
 .card.off .name { text-decoration: line-through; }
-.total b { color: var(--accent-dark); font-weight: 600; }
 /* The run */
 .steps { flex: 1; min-height: 0; overflow-y: auto; background: #fff; border: 1px solid #000; padding: 8px; display: grid; gap: 6px; align-content: start; }
 .step { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 44px; }
@@ -114,12 +117,11 @@ header .seg { margin-left: 16px; }
           <div class="photo" id="sampleBox" tabindex="0"></div>
           <label>Nhạc nền (tuỳ chọn)</label>
           <div class="music" id="musicBox" tabindex="0"></div>
-          <div class="settings" style="margin-top:10px">
-            <div><label>Độ dài video</label><div class="seg" id="length"></div></div>
-            <div><label>Khổ</label><div class="seg" id="aspect"></div></div>
-            <div><label>Phụ đề tiếng Anh</label><div class="seg" id="captions"></div></div>
+          <div class="opts">
+            <div><label for="length">Độ dài video</label><select id="length"></select></div>
+            <div><label for="aspect">Khổ</label><select id="aspect"></select></div>
+            <div><label for="captions">Phụ đề tiếng Anh</label><select id="captions"></select></div>
           </div>
-          <div id="total" class="total"></div>
         </section>
       </div>
       <div class="col">
@@ -202,8 +204,8 @@ window.addEventListener("error", (e) => fetch("/api/client-error", { method: "PO
 // @@EVENT lines this page polls. The sample video (video mẫu, optional) only lends how it is made.
 const fileUrl = (path) => `/file?path=${encodeURIComponent(path)}`;
 const KEY = "product-video:make:v1";
-let DATA = { settings: { lengths: [30], defaultLength: 30, aspects: ["auto"], defaultResolution: "720p", shotSeconds: 2.6, maxSeconds: 60, minutesPerShot: 1.2, minutesPerFrameRound: 2, codexParallel: 4 } };
-const make = { photo: "", model: "", name: "", reference: "", length: 0, aspect: "auto", captions: null };
+let DATA = { settings: { lengths: [30], defaultLength: 30, aspects: ["2:3"], defaultAspect: "2:3", defaultResolution: "720p", shotSeconds: 2.6, maxSeconds: 60, minutesPerShot: 1.2, minutesPerFrameRound: 2, codexParallel: 4 } };
+const make = { photo: "", model: "", name: "", reference: "", length: 0, aspect: "", captions: null };
 const run = { since: 0, running: false, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 };
 const persist = () => store.set(KEY, make);
 
@@ -229,36 +231,13 @@ function renderPhotos() {
     node.append(libraryButton(key, title));
   }
 }
-// The sample: its length and shape come from the player, as the run will read them (src/plan.ps1).
-let sampleInfo = null;
+// The sample, playing in its box.
 function renderSample() {
   const node = $("sampleBox");
   node.replaceChildren();
-  sampleInfo = null;
-  if (make.reference) {
-    const video = el("video", { src: fileUrl(make.reference), muted: true, loop: true, autoplay: true, playsInline: true });
-    video.onloadedmetadata = () => { sampleInfo = { seconds: video.duration, width: video.videoWidth, height: video.videoHeight }; renderTotal(); };
-    video.onerror = () => { sampleInfo = null; renderTotal(); };
-    node.append(video, clearButton("reference"));
-  } else node.append(Object.assign(el("span"), { innerHTML: "<b>Video mẫu (tuỳ chọn)</b>Bấm hoặc kéo video MP4 vào, hoặc chọn từ kho. Không có thì dùng chuỗi cảnh mặc định" }));
+  if (make.reference) node.append(el("video", { src: fileUrl(make.reference), muted: true, loop: true, autoplay: true, playsInline: true }), clearButton("reference"));
+  else node.append(Object.assign(el("span"), { innerHTML: "<b>Video mẫu (tuỳ chọn)</b>Bấm hoặc kéo video MP4 vào, hoặc chọn từ kho. Không có thì dùng chuỗi cảnh mặc định" }));
   node.append(libraryButton("reference", "Video mẫu"));
-  renderTotal();
-}
-const clock = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
-// An estimate before the run (src/plan.ps1 makes the real plan): shots of at most shotSeconds, a round of Codex frames
-// per codexParallel angles, a Grok clip per shot.
-const videoLength = () => make.length || (make.reference ? Math.min(sampleInfo?.seconds || 0, DATA.settings.maxSeconds) : DATA.settings.defaultLength);
-function renderTotal() {
-  if (make.reference && !sampleInfo) return $("total").replaceChildren(el("span", { className: "muted", textContent: "Đang đọc video mẫu…" }));
-  const s = DATA.settings;
-  const used = videoLength();
-  const shots = Math.max(1, Math.ceil(used / s.shotSeconds - 0.001));
-  const frames = Math.min(shots, 9) + (make.model ? 1 : 0);
-  const minutes = Math.round(shots * s.minutesPerShot + Math.ceil(frames / s.codexParallel) * s.minutesPerFrameRound);
-  const r = sampleInfo ? sampleInfo.width / sampleInfo.height : 0;
-  const aspect = make.aspect !== "auto" ? make.aspect : !make.reference ? "2:3" : r < 0.8 ? "2:3" : r > 1.25 ? "3:2" : "1:1";
-  const note = make.reference && !make.length && sampleInfo.seconds > s.maxSeconds ? ` · chỉ lấy ${s.maxSeconds} giây đầu` : "";
-  $("total").replaceChildren(el("b", { textContent: `Video ${clock(used)}` }), ` · khổ ${aspect} · khoảng ${shots} cảnh · chờ khoảng ${minutes} phút${note}`);
 }
 // Nhạc nền: a track from the library (product-video-sources/music) or uploaded; the run lays it under the whole video.
 function renderMusic() {
@@ -362,20 +341,21 @@ document.addEventListener("paste", (e) => {
   upload(f, pasteInto || (make.photo ? "model" : "photo"));
 });
 
-const ASPECT_LABEL = { auto: "Tự động", "2:3": "Dọc 2:3", "1:1": "Vuông", "3:2": "Ngang 3:2" };
+const ASPECT_LABEL = { auto: "Theo video mẫu", "2:3": "Dọc 2:3 (Facebook)", "1:1": "Vuông 1:1", "3:2": "Ngang 3:2" };
 function renderSettings() {
-  const seg = (id, values, current, key, fmt) => $(id).replaceChildren(...values.map((v) => {
-    const b = el("button", { type: "button", textContent: fmt(v) });
-    b.setAttribute("aria-pressed", v === current);
-    b.onclick = () => { make[key] = v; persist(); renderSettings(); renderTotal(); };
-    return b;
-  }));
-  // "Như mẫu" only with a sample; without one, 0 stands for defaultLength.
+  // A select of values; a change goes into the job (persist).
+  const pick = (id, values, current, key, fmt, parse) => {
+    const select = $(id);
+    select.replaceChildren(...values.map((v) => el("option", { value: String(v), textContent: fmt(v) })));
+    select.value = String(current);
+    select.onchange = () => { make[key] = parse(select.value); persist(); };
+  };
+  // "Như video mẫu" only with a sample; without one, 0 stands for defaultLength.
   const lengths = make.reference ? [0, ...DATA.settings.lengths] : DATA.settings.lengths;
-  seg("length", lengths, make.reference ? make.length : make.length || DATA.settings.defaultLength, "length", (v) => (v ? `${v}s` : "Như mẫu"));
-  seg("aspect", DATA.settings.aspects, make.aspect, "aspect", (v) => ASPECT_LABEL[v] || v);
+  pick("length", lengths, make.reference ? make.length : make.length || DATA.settings.defaultLength, "length", (v) => (v ? `${v} giây` : "Như video mẫu"), Number);
+  pick("aspect", DATA.settings.aspects, make.aspect, "aspect", (v) => ASPECT_LABEL[v] || v, String);
   // Captions: English lines Codex writes from the shots and the brand (src/script.ps1), burnt in; null = the default.
-  seg("captions", [true, false], make.captions ?? DATA.settings.captions === true, "captions", (v) => (v ? "Có" : "Không"));
+  pick("captions", [false, true], make.captions ?? DATA.settings.captions === true, "captions", (v) => (v ? "Có" : "Không"), (v) => v === "true");
 }
 // Hiệu ứng, Góc máy: every transition (a sample clip) and angle (a sample frame) from product-video-sources/samples, as a
 // card; a click switches it on or off and saves the list at once (server.mjs: workspace/lua-chon.json, which the run
@@ -649,7 +629,7 @@ Promise.all([fetch("/api/data").then((r) => r.json()), fetch("/api/ui-state").th
   $("name").value = make.name;
   for (const page of ["fx", "angles"]) { filterOf[page] = store.get(`filter:${page}`, "all"); filterDraw[page](); }
   if (make.length && !data.settings.lengths.includes(make.length)) make.length = 0;
-  if (!data.settings.aspects.includes(make.aspect)) make.aspect = "auto";
+  if (!data.settings.aspects.includes(make.aspect)) make.aspect = data.settings.defaultAspect;
   render(); renderRun(); poll();
   showPage(store.get("page", "make"));
 }, () => toast("Không đọc được dữ liệu. Đóng và mở lại Product Video."));

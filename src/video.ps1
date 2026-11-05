@@ -23,7 +23,7 @@ function Get-ErrorCause([string]$Message) { if ($Message -match '\[CAUSE:(\w+)\]
 
 # The job the window sends, checked: { product, photo, model?, reference?, music?, length, aspect, resolution, captions? }.
 # Length: seconds (one of lengths; 0 is as long as the sample, or defaultLength without one). Aspect: one of aspects
-# (auto: the sample's shape, else 2:3). Captions: English lines written by Codex and burnt in (default: settings).
+# (defaultAspect, 2:3, when the job has none). Captions: English lines written by Codex and burnt in (default: settings).
 function Test-VideoJob($Job) {
     $settings = Get-VideoSettings
     if (-not ([string]$Job.product).Trim()) { throw 'Điền tên sản phẩm.' }
@@ -32,7 +32,7 @@ function Test-VideoJob($Job) {
     if ($Job.reference -and -not (Test-Path -LiteralPath ([string]$Job.reference) -PathType Leaf)) { throw 'Không thấy video mẫu.' }
     if ($Job.music -and -not (Test-Path -LiteralPath ([string]$Job.music) -PathType Leaf)) { throw 'Không thấy file nhạc nền.' }
     if (@($settings.resolutions) -notcontains [string]$Job.resolution) { throw "Độ phân giải không hỗ trợ: $($Job.resolution)." }
-    $aspect = if ($Job.aspect) { [string]$Job.aspect } else { 'auto' }
+    $aspect = if ($Job.aspect) { [string]$Job.aspect } else { [string]$settings.defaultAspect }
     if (@($settings.aspects) -notcontains $aspect) { throw "Khổ video không hỗ trợ: $aspect." }
     $length = [int]$Job.length
     if ($length -and @($settings.lengths) -notcontains $length) { throw "Độ dài video $(@($settings.lengths) -join ', ') giây, không phải $length." }

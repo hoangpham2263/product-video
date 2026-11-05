@@ -1,8 +1,10 @@
 {
   "note": "Một cách làm: video là chuỗi cảnh ngắn (tối đa shotSeconds giây), mỗi cảnh một góc (data/angles.json) và một kiểu máy chạy. Codex CLI vẽ khung góc từ ảnh sản phẩm (codexParallel khung cùng lúc), Grok quay clip grokSeconds giây từ khung đó, lấy phần đầu ở tốc độ thật, hoà hình fadeSeconds. Có video mẫu: học cách làm (chỗ cắt theo sceneThreshold/minShot hoặc kế hoạch <video>.json, máy chạy đo bằng vidstabdetect, giới hạn maxZoom/maxPan), chỉ dùng maxSeconds giây đầu; cảnh không có góc trong kế hoạch lấy lần lượt từ angles. Không có video mẫu: defaultShots lần lượt. Độ dài: lengths (0 = như mẫu, không có mẫu thì defaultLength). Khổ: aspects (auto = theo mẫu, không có mẫu thì 2:3); Codex chỉ vẽ 2:3, 3:2, 1:1. Tối đa maxShots cảnh. Chuyển động trong defaultShots là lượng thấy được trong một cảnh (zoom 1.04 = to lên 4%; panX âm = máy trượt phải; panY dương = máy nâng lên).",
-  "lengths": [20, 30, 45, 60],
+  "lengths": [10, 15, 20, 25, 30, 40, 45, 50, 60],
   "defaultLength": 30,
-  "aspects": ["auto", "2:3", "1:1", "3:2"],
+  "aspects": ["2:3", "1:1", "3:2"],
+  "defaultAspect": "2:3",
+  "aspectsNote": "Khổ video: Codex chỉ vẽ 2:3, 1:1, 3:2. Mặc định Dọc 2:3, gần nhất với bài đăng Facebook (4:5) và Reels; không còn tự theo video mẫu (người dùng 05/11/2026).",
   "resolutions": ["480p", "720p", "1080p"],
   "defaultResolution": "720p",
   "musicVolume": 0.8,
