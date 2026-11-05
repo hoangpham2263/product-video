@@ -44,6 +44,35 @@ function Test-VideoJob($Job) {
     }
 }
 
+# The video's record for whoever writes its post (the grenheim-skills content skill, process G): what was made, from
+# what, shot by shot, and a clean frame for the cover; the app writes no post itself (its voice and checks live there).
+#   ho-so.json { product, created, video, videoSilent?, seconds, width, height, aspect, music?, photo, model?, reference?,
+#   cover, shots: [{ index, angle, angleLabel, seconds, move, transitionIn, frame }], lines? }
+function Write-VideoBrief($Plan, $Shots, $Frames, $Into, $Clips, $Lines, [string]$Video, $Info, [string]$Aspect, [string]$Output) {
+    $angles = @((Read-JsonFile (Join-Path (Get-ToolRoot) 'data/angles.json')).angles)
+    $made = @($Clips | ForEach-Object { $_.Index })
+    $cover = @('product-full', 'as-photo', 'room-wide', 'medium') | ForEach-Object { $Frames[$_] } | Where-Object { $_ } | Select-Object -First 1
+    $silent = [IO.Path]::ChangeExtension($Video, $null).TrimEnd('.') + '-khong-nhac.mp4'
+    $brief = [ordered]@{
+        product = $Plan.Product; created = [DateTime]::Now.ToString('yyyy-MM-dd HH:mm'); video = $Video
+        videoSilent = $(if (Test-Path -LiteralPath $silent) { $silent } else { $null })
+        seconds = [Math]::Round($Info.Seconds, 2); width = $Info.Width; height = $Info.Height; aspect = $Aspect
+        music = $(if ($Plan.Music) { $Plan.Music } else { $null }); photo = $Plan.Photo
+        model = $(if ($Plan.Model) { $Plan.Model } else { $null }); reference = $(if ($Plan.Reference) { $Plan.Reference } else { $null })
+        cover = $(if ($cover) { $cover } else { $Plan.Photo })
+        shots = @(foreach ($shot in @($Shots | Where-Object { $made -contains $_.Index })) {
+            $k = [array]::IndexOf($made, $shot.Index)
+            [ordered]@{
+                index = $shot.Index; angle = $shot.Angle; angleLabel = [string]($angles | Where-Object { $_.id -eq $shot.Angle } | Select-Object -First 1).label
+                seconds = [Math]::Round($shot.Seconds, 2); move = $shot.MoveVi; transitionIn = $(if ($k -gt 0) { $Into[$k - 1] } else { $null })
+                frame = $(if ($Frames[$shot.Angle]) { $Frames[$shot.Angle] } else { $null })
+            }
+        })
+        lines = $(if (@($Lines).Count) { @($Lines) } else { $null })
+    }
+    Write-Utf8 $Output (ConvertTo-Json -InputObject $brief -Depth 6)
+}
+
 # The shots of a job, each with its move in words (MoveEn for Grok, MoveVi for the window), and the video's shape.
 # With a sample its moves are measured into $Logs (mau.trf).
 function Get-RunPlan($Plan, [string]$Logs) {
@@ -182,6 +211,8 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
                 catch { Copy-Item -LiteralPath $silent -Destination $final -Force; Send-Event @{ kind = 'warning'; message = "Chưa ghép được nhạc nền, video không có nhạc: $($_.Exception.Message)" } }
             }
             $out = Get-HubVideoInfo $final
+            try { Write-VideoBrief $plan $shots $frames $into $clips $lines $final $out $aspect (Join-Path $folder 'ho-so.json') }
+            catch { Send-Event @{ kind = 'warning'; message = "Chưa ghi được hồ sơ video: $($_.Exception.Message)" } }
             Send-Event @{ kind = 'final'; file = $final; seconds = [Math]::Round($out.Seconds, 1); width = $out.Width; height = $out.Height }
             $ok = $true
         } catch { Send-Event @{ kind = 'warning'; message = $_.Exception.Message } }
