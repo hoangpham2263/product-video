@@ -576,15 +576,16 @@ async function loadAnalyzeList() {
   const r = await fetch("/api/analyze/videos").then((x) => x.json()).catch(() => ({ videos: [] }));
   const options = r.videos.map((v) => ({ value: v.path, textContent: `${v.name}${v.plan ? " (có kế hoạch)" : ""}` }));
   if (make.reference && !options.some((o) => o.value === make.reference)) options.unshift({ value: make.reference, textContent: "Video mẫu đang chọn ở Tạo video" });
-  $("anList").replaceChildren(...(options.length ? options : [{ value: "", textContent: "Chưa có video: chọn video mẫu ở Tạo video hoặc Từ kho" }]).map((o) => el("option", o)));
-  const last = an.video || store.get("analyze", "");
-  if (last && options.some((o) => o.value === last)) $("anList").value = last;
+  // No video is picked for the user: the list starts on "Chọn video…" until one is chosen (kept while the window is open).
+  const first = { value: "", textContent: options.length ? "Chọn video để phân tích…" : "Chưa có video: chọn video mẫu ở Tạo video hoặc Từ kho" };
+  $("anList").replaceChildren(...[first, ...options].map((o) => el("option", o)));
+  if (an.video && options.some((o) => o.value === an.video)) $("anList").value = an.video;
   pickAnalyze($("anList").value);
 }
 function pickAnalyze(video) {
   if (video === an.video && $("anBox").firstChild) return;
-  an.video = video; an.result = null; store.set("analyze", video);
-  $("anBox").replaceChildren(video ? el("video", { src: fileUrl(video), muted: true, controls: true, playsInline: true }) : Object.assign(el("span"), { innerHTML: "<b>Chưa có video</b>" }));
+  an.video = video; an.result = null;
+  $("anBox").replaceChildren(video ? el("video", { src: fileUrl(video), muted: true, controls: true, playsInline: true }) : Object.assign(el("span"), { innerHTML: "<b>Chưa chọn video</b>Chọn một video ở danh sách trên" }));
   $("anRun").disabled = !video; $("anUse").disabled = !video;
   renderShots();
 }
