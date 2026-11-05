@@ -58,7 +58,7 @@ main { height: 100%; display: flex; flex-direction: column; }
 .card .sub { padding: 0 8px; font-size: 12px; color: var(--muted); }
 .card .state { margin: 6px 8px 8px; font-size: 12px; color: #006400; }
 .card.off { border-color: rgb(176, 0, 0); }
-.card.off video, .card.off img { opacity: .35; }
+.card.off video, .card.off img { filter: grayscale(.9); }
 .card.off .name { text-decoration: line-through; }
 .card.off .state { color: rgb(176, 0, 0); }
 .total b { color: var(--accent-dark); font-weight: 600; }
@@ -394,6 +394,9 @@ function choiceCard(list, id, media, name, sub, onSaved) {
   show();
   return card;
 }
+// The still a card shows: a quarter into the cut (samples cut from 1 s to 2 s), the picture still clear with the effect
+// just showing; half-way (1.5 s) most looked washed out (05/11/2026).
+const FX_STILL = 1.25;
 // The samples load only once their card is on screen: all 46 at once made the window drop some, which stayed blank
 // (05/11/2026, Lộ dần). A load that fails or stalls is tried again, up to 3 times.
 const fxSeen = new IntersectionObserver((entries) => {
@@ -401,7 +404,7 @@ const fxSeen = new IntersectionObserver((entries) => {
     if (!isIntersecting || v.getAttribute("src")) continue;
     fxSeen.unobserve(v);
     let tries = 0;
-    const load = () => { v.src = `${v.dataset.src}${tries ? `?r=${tries}` : ""}#t=1.5`; v.load(); };
+    const load = () => { v.src = `${v.dataset.src}${tries ? `?r=${tries}` : ""}#t=${FX_STILL}`; v.load(); };
     const retry = () => { if (v.readyState < 2 && tries < 3) { tries++; setTimeout(load, 800 * tries); } };
     v.onerror = retry;
     v.onstalled = () => setTimeout(retry, 4000);
@@ -416,7 +419,7 @@ function renderFx() {
     video.dataset.src = `${DATA.samples}/transitions/${n}.mp4`;
     fxSeen.observe(video);
     video.onmouseenter = () => { video.currentTime = 0; video.play().catch(() => {}); };
-    video.onmouseleave = () => { video.pause(); video.currentTime = 1.5; };
+    video.onmouseleave = () => { video.pause(); video.currentTime = FX_STILL; };
     return choiceCard("bannedTransitions", n, video, FX_LABEL[n] || n, n, status);
   }));
   status();
