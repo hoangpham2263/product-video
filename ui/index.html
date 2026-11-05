@@ -24,7 +24,9 @@ main { height: 100%; display: flex; flex-direction: column; }
 .photo video { background: #000; }
 .photo .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; padding: 0; z-index: 1; }
 .photo b { color: var(--ink); font-weight: 400; display: block; margin-bottom: 4px; }
-.photo .lib { position: absolute; left: 6px; bottom: 6px; height: 26px; padding: 0 10px; z-index: 1; }
+.photo .tools { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 6px; z-index: 1; }
+.photo .tools .btn { height: 26px; padding: 0 10px; }
+.music .tools { display: flex; gap: 6px; }
 #sampleBox { flex: 1; min-height: 160px; height: auto; }
 /* Nhạc nền: one row, the track playable in place, Từ kho and × at the end. */
 .music { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; background: #fff; border: 1px dashed var(--line); color: var(--muted); cursor: pointer; }
@@ -209,13 +211,32 @@ const make = { photo: "", model: "", name: "", reference: "", length: 0, aspect:
 const run = { since: 0, running: false, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 };
 const persist = () => store.set(KEY, make);
 
-const BOXES = [["photoBox", "photo", "Ảnh sản phẩm", "Bấm, kéo ảnh vào, hoặc rê chuột vào đây rồi Ctrl+V"], ["modelBox", "model", "Người mẫu (tuỳ chọn)", "Giới thiệu sản phẩm ở cảnh đầu. Bấm, kéo ảnh vào hoặc Ctrl+V"]];
+const BOXES = [["photoBox", "photo", "Ảnh sản phẩm", "Bấm để chọn từ kho, kéo ảnh vào, hoặc rê chuột vào rồi Ctrl+V"], ["modelBox", "model", "Người mẫu (tuỳ chọn)", "Giới thiệu sản phẩm ở cảnh đầu. Bấm để chọn từ kho, kéo ảnh vào hoặc Ctrl+V"]];
 // Each box also picks from its own part of the library (product-video-sources): products, models or videos.
 const LIBRARY_KIND = { photo: "products", model: "models", reference: "videos", music: "music" };
+// The box's buttons: Từ kho, Từ máy (a file on this computer) and, for images, Dán (the clipboard). A click on the box
+// itself opens the kho.
+const PICKER = { reference: "videoPicker", music: "audioPicker" };
+const pickFromComputer = (key) => { pickFor = key; const p = $(PICKER[key] || "picker"); p.value = ""; p.click(); };
+async function pasteFromClipboard(key) {
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith("image/"));
+      if (type) return upload(new File([await item.getType(type)], `anh.${type.split("/")[1]}`, { type }), key);
+    }
+    toast("Clipboard chưa có ảnh");
+  } catch { toast("Không đọc được clipboard: rê chuột vào khung rồi Ctrl+V"); }
+}
 const libraryButton = (key, title) => {
-  const lib = el("button", { className: "btn lib", type: "button", textContent: "Từ kho" });
-  lib.onclick = (e) => { e.stopPropagation(); pickFromLibrary(key, title); };
-  return lib;
+  const tools = el("div", { className: "tools" });
+  const button = (text, action) => {
+    const b = el("button", { className: "btn", type: "button", textContent: text });
+    b.onclick = (e) => { e.stopPropagation(); action(); };
+    return b;
+  };
+  tools.append(button("Từ kho", () => pickFromLibrary(key, title)), button("Từ máy", () => pickFromComputer(key)));
+  if (key === "photo" || key === "model") tools.append(button("Dán", () => pasteFromClipboard(key)));
+  return tools;
 };
 const clearButton = (key) => {
   const x = el("button", { className: "btn x", type: "button", textContent: "×", title: "Bỏ" });
@@ -236,7 +257,7 @@ function renderSample() {
   const node = $("sampleBox");
   node.replaceChildren();
   if (make.reference) node.append(el("video", { src: fileUrl(make.reference), muted: true, loop: true, autoplay: true, playsInline: true }), clearButton("reference"));
-  else node.append(Object.assign(el("span"), { innerHTML: "<b>Video mẫu (tuỳ chọn)</b>Bấm hoặc kéo video MP4 vào, hoặc chọn từ kho. Không có thì dùng chuỗi cảnh mặc định" }));
+  else node.append(Object.assign(el("span"), { innerHTML: "<b>Video mẫu (tuỳ chọn)</b>Bấm để chọn từ kho, hoặc kéo video MP4 vào. Không có thì dùng chuỗi cảnh mặc định" }));
   node.append(libraryButton("reference", "Video mẫu"));
 }
 // Nhạc nền: a track from the library (product-video-sources/music) or uploaded; the run lays it under the whole video.
@@ -247,7 +268,7 @@ function renderMusic() {
     const audio = el("audio", { src: fileUrl(make.music), controls: true, preload: "metadata" });
     audio.onclick = (e) => e.stopPropagation();
     node.append(audio, clearButton("music"));
-  } else node.append(el("span", { className: "hint", textContent: "Bấm hoặc kéo file MP3, M4A, WAV vào, hoặc chọn từ kho. Không có thì video không có tiếng" }));
+  } else node.append(el("span", { className: "hint", textContent: "Bấm để chọn từ kho, hoặc kéo file MP3, M4A, WAV vào. Không có thì video không có tiếng" }));
   node.append(libraryButton("music", "Nhạc nền"));
 }
 function render() { renderPhotos(); renderSample(); renderMusic(); renderSettings(); }
@@ -312,10 +333,10 @@ async function upload(file, key) {
   if (!r?.ok) return toast(body?.error || "Không tải lên được");
   make[key] = body.path; persist(); render();
 }
-const PICKER = { reference: "videoPicker", music: "audioPicker" };
+const TITLES = { photo: "Ảnh sản phẩm", model: "Người mẫu", reference: "Video mẫu", music: "Nhạc nền" };
 for (const [box, key] of [...BOXES, ["sampleBox", "reference"], ["musicBox", "music"]]) {
   const node = $(box);
-  node.onclick = () => { pickFor = key; const p = $(PICKER[key] || "picker"); p.value = ""; p.click(); };
+  node.onclick = () => pickFromLibrary(key, TITLES[key]);
   node.addEventListener("dragover", (e) => { e.preventDefault(); node.classList.add("dropping"); });
   node.addEventListener("dragleave", () => node.classList.remove("dropping"));
   node.addEventListener("drop", (e) => { e.preventDefault(); node.classList.remove("dropping"); upload(e.dataTransfer.files[0], key); });
@@ -341,7 +362,7 @@ document.addEventListener("paste", (e) => {
   upload(f, pasteInto || (make.photo ? "model" : "photo"));
 });
 
-const ASPECT_LABEL = { auto: "Theo video mẫu", "2:3": "Dọc 2:3 (Facebook)", "1:1": "Vuông 1:1", "3:2": "Ngang 3:2" };
+const ASPECT_LABEL = { auto: "Theo video mẫu", "2:3": "Dọc 2:3", "1:1": "Vuông 1:1", "3:2": "Ngang 3:2" };
 function renderSettings() {
   // A select of values; a change goes into the job (persist).
   const pick = (id, values, current, key, fmt, parse) => {
