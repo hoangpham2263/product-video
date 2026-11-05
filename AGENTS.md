@@ -5,7 +5,7 @@ Repo `hoangpham2263/product-video` (tách từ tool Grok Video của Tools Hub).
 ## Cấu trúc
 
 - Gốc repo là app: `src/`, `ui/`, `data/`, `workspace/` (Git bỏ qua: cấu hình, ảnh kho đã tải, kết quả, log, ffmpeg). `core/` là hạ tầng: gọi AI (`core/ai`), bridge (`core/bridge`, cổng 8785) và extension Chrome Product Video (`core/extension`), Cấu hình (`core/setup`: Node.js, extension, Grok), cửa sổ Windows (`core/launch.ps1`, WebView2), cập nhật (`core/update.ps1`), nút Cập nhật/Cấu hình/Tải lại (`core/assets/hub.js`).
-- Kho: repo công khai `hoangpham2263/product-video-sources`, `manifest.json` liệt kê nhóm theo loại (`products`, `models`, `videos`), file ở `<loại>/<nhóm>/<tên>`. Ô ảnh sản phẩm, người mẫu và video mẫu có nút **Từ kho** (`src/library.mjs`): chọn thì tải một lần vào `workspace/library/`.
+- Kho: repo công khai `hoangpham2263/product-video-sources`, `manifest.json` liệt kê nhóm theo loại (`products`, `models`, `videos`, `music`), file ở `<loại>/<nhóm>/<tên>`. Ô ảnh sản phẩm, người mẫu, video mẫu và nhạc nền có nút **Từ kho** (`src/library.mjs`): chọn thì tải một lần vào `workspace/library/`.
 - Kết quả chỉ lưu trên máy (`workspace/output/`), không đẩy lên đâu. Không Drive, không mật khẩu, không Worker.
 - Phát hành: push tag `vX.Y.Z` → Release `product-video.zip`; Cập nhật thay file, giữ `workspace/`, `core/bridge/node_modules`. Trang tải `docs/index.html` (GitHub Pages) chỉ có nút tải.
 - Commit chỉ đứng tên người dùng, không thêm dòng Claude.
@@ -27,6 +27,7 @@ Mã nguồn:
 - **Lựa chọn của người dùng**: trang **Hiệu ứng** và **Góc máy** (mỗi thẻ có video/ảnh mẫu từ kho `product-video-sources/samples/transitions/<tên>.mp4`, `samples/angles/<id>.jpg`, vẽ từ cùng một ảnh bàn ăn), bấm để Dùng/Không dùng, lưu ngay vào `workspace/lua-chon.json` (`bannedTransitions`, `bannedAngles`; `POST /api/choices`); `Get-VideoSettings` đè lên mặc định của `data/video.json`.
 - `src/brand.ps1`: intro/outro thương hiệu (GRENHEIM chốt 04/11/2026) nằm trong app ở `data/brand/` (`brand.json`: logo, chữ, màu; người dùng 04/11/2026: không để ở workspace/; số đo theo khung 720x1280, quy theo khung thật). Intro: logo trắng có bóng mềm kiểu text-shadow, tâm ở 2/5 chiều cao, phủ lên giây đầu, hình giữ nét (người dùng bác kiểu làm nhoè và quầng sáng); outro 5 s nền màu thương hiệu, hoà hình từ cảnh cuối.
 - `src/script.ps1` + `src/captions.ps1` (**phụ đề tiếng Anh**, bật/tắt trên trang Tạo video, mặc định tắt: `captions` false, người dùng 05/11/2026): trước khi quay, Codex viết lời theo các cảnh và dữ kiện thật của thương hiệu (`Get-BrandFacts`: mục `script` của `data/brand/brand.json`, nằm trong app nên máy nào cũng có; không bịa ngoài dữ kiện), kiểm thời gian (khoảng 2,5 từ/giây), sai thì Codex viết lại 1 lần (`logs/kich-ban.json`). Ghép xong thì đốt lời vào video (chữ trắng trên nền xanh thương hiệu, trong vùng an toàn) và xuất `video-<tên>.srt`. Thiếu cảnh thì bỏ phụ đề (lời không còn khớp thời gian). Chế độ người dẫn nói (Grok có tiếng) chưa nối.
+- **Nhạc nền** (tuỳ chọn, ô Nhạc nền trên trang Tạo video: **Từ kho** `product-video-sources/music/<nhóm>/<bài>` hoặc tải lên MP3/M4A/AAC/WAV): `Add-VideoMusic` (edit.ps1) ghép cuối cùng dưới cả video kể cả outro, cắt vừa độ dài (lặp khi ngắn hơn), hiện dần `musicFadeIn`, nhỏ dần `musicFadeOut` giây cuối, âm lượng `musicVolume` (data/video.json). Video cuối `video-<tên>.mp4` có nhạc, bản không nhạc `video-<tên>-khong-nhac.mp4`. Kho có sẵn nhóm "Êm dịu" (một bài nhạc tổng hợp bằng ffmpeg, không vướng bản quyền); nhạc thêm vào kho phải được phép dùng thương mại.
 - Thứ tự ghép: `video-<tên>-canh.mp4` (chỉ cảnh) → `video-<tên>-phu-de.mp4` (có phụ đề) → `video-<tên>.mp4` (thêm intro/outro; outro không có phụ đề).
 - Thứ tự nạp file (`run-video.ps1`): `core/ai/ai.ps1`, `product-rules`, `ffmpeg`, `plan` (hàm chung: `Get-ToolRoot`, `Read-JsonFile`, `Write-Utf8`, `Format-Seconds`, `Get-VideoSettings`), `prompts`, `generate`, `transitions`, `edit`, `brand` (font: `Copy-BrandFont`), `captions`, `script`, `video`. Không file nào tự nạp file khác; test tự nạp những gì nó cần.
 - `src/ffmpeg.ps1`: ffmpeg trên PATH, nếu không có thì tải bản tĩnh một lần vào `workspace/tools/ffmpeg`.
@@ -43,4 +44,4 @@ Kết quả ở `workspace/output/<thời điểm>-<tên>/`: `khung-<góc>.png`,
 ## Chưa làm hoặc chưa kiểm chứng
 
 - Test offline: `node --test tests/*.test.mjs` (kho, `motion.mjs`, `plan.ps1` + `transitions.ps1`, phụ đề, kịch bản); chưa có test lượt chạy với AI giả.
-- Video không tiếng; nhạc nền thêm sau (CapCut).
+- Grok quay không tiếng; tiếng duy nhất là nhạc nền (nếu chọn).

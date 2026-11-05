@@ -35,9 +35,10 @@ const logError = (where, text) => {
 process.on("uncaughtException", (e) => { logError("Máy chủ Product Video", e.stack || e); process.exit(1); });
 process.on("unhandledRejection", (e) => logError("Máy chủ Product Video", e?.stack || e));
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac", ".wav": "audio/wav" };
 const IMAGE_EXT = [".png", ".jpg", ".jpeg", ".webp"];
-const SERVED_EXT = [...IMAGE_EXT, ".mp4", ".mov", ".webm"];
+const AUDIO_EXT = [".mp3", ".m4a", ".aac", ".wav"];
+const SERVED_EXT = [...IMAGE_EXT, ".mp4", ".mov", ".webm", ...AUDIO_EXT];
 const CORE_ASSETS = ["tool.css", "hub.js"];
 
 const readJson = async (file) => JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
@@ -202,10 +203,10 @@ async function handle(req, res) {
     return send(res, 200, { ok: true });
   }
   if (path === "/api/upload" && req.method === "POST") {
-    // A picked or dropped photo or sample video becomes a file the run reads (the window cannot hand PowerShell a blob).
+    // A picked or dropped photo, sample video or music track becomes a file the run reads (the window cannot hand PowerShell a blob).
     const name = (url.searchParams.get("name") || "image.png").replace(/[^\w.-]/g, "_");
     const ext = extname(name).toLowerCase();
-    if (!SERVED_EXT.includes(ext)) return send(res, 400, { error: "Chọn ảnh PNG, JPEG, WebP hoặc video MP4, MOV, WebM." });
+    if (!SERVED_EXT.includes(ext)) return send(res, 400, { error: "Chọn ảnh PNG, JPEG, WebP, video MP4, MOV, WebM hoặc nhạc MP3, M4A, AAC, WAV." });
     await mkdir(uploads, { recursive: true });
     const file = join(uploads, `${randomUUID().replace(/-/g, "")}${ext}`);
     await writeFile(file, await body(req));

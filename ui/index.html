@@ -26,6 +26,15 @@ main { height: 100%; display: flex; flex-direction: column; }
 .photo b { color: var(--ink); font-weight: 400; display: block; margin-bottom: 4px; }
 .photo .lib { position: absolute; left: 6px; bottom: 6px; height: 26px; padding: 0 10px; z-index: 1; }
 #sampleBox { flex: 1; min-height: 160px; height: auto; }
+/* Nhạc nền: one row, the track playable in place, Từ kho and × at the end. */
+.music { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; background: #fff; border: 1px dashed var(--line); color: var(--muted); cursor: pointer; }
+.music:hover, .music.dropping { background: var(--hover); border-color: var(--accent); }
+.music audio { flex: 1; min-width: 0; height: 32px; }
+.music .hint { flex: 1; }
+.music .btn { height: 28px; padding: 0 10px; }
+.library .grid .track { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid var(--line); background: #fff; }
+.library .grid .track span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library .grid .track audio { width: 260px; height: 32px; }
 /* Kho: a danh mục, then its photos or videos as a grid of thumbnails. */
 .dialog.library { width: min(760px, calc(100vw - 32px)); }
 .library .top { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
@@ -101,6 +110,8 @@ header .seg { margin-left: 16px; }
         <section class="group grow">
           <h2>Video mẫu (tuỳ chọn): học cách làm, không lấy hình</h2>
           <div class="photo" id="sampleBox" tabindex="0"></div>
+          <label>Nhạc nền (tuỳ chọn)</label>
+          <div class="music" id="musicBox" tabindex="0"></div>
           <div class="settings" style="margin-top:10px">
             <div><label>Độ dài video</label><div class="seg" id="length"></div></div>
             <div><label>Khổ</label><div class="seg" id="aspect"></div></div>
@@ -168,6 +179,7 @@ header .seg { margin-left: 16px; }
 </main>
 <input type="file" id="picker" accept="image/png,image/jpeg,image/webp" hidden>
 <input type="file" id="videoPicker" accept="video/mp4,video/quicktime,video/webm" hidden>
+<input type="file" id="audioPicker" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/wav,.mp3,.m4a,.aac,.wav" hidden>
 <div class="toast" id="toast"></div>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -188,7 +200,7 @@ const persist = () => store.set(KEY, make);
 
 const BOXES = [["photoBox", "photo", "Ảnh sản phẩm", "Bấm, kéo ảnh vào, hoặc rê chuột vào đây rồi Ctrl+V"], ["modelBox", "model", "Người mẫu (tuỳ chọn)", "Giới thiệu sản phẩm ở cảnh đầu. Bấm, kéo ảnh vào hoặc Ctrl+V"]];
 // Each box also picks from its own part of the library (product-video-sources): products, models or videos.
-const LIBRARY_KIND = { photo: "products", model: "models", reference: "videos" };
+const LIBRARY_KIND = { photo: "products", model: "models", reference: "videos", music: "music" };
 const libraryButton = (key, title) => {
   const lib = el("button", { className: "btn lib", type: "button", textContent: "Từ kho" });
   lib.onclick = (e) => { e.stopPropagation(); pickFromLibrary(key, title); };
@@ -239,12 +251,23 @@ function renderTotal() {
   const note = make.reference && !make.length && sampleInfo.seconds > s.maxSeconds ? ` · chỉ lấy ${s.maxSeconds} giây đầu` : "";
   $("total").replaceChildren(el("b", { textContent: `Video ${clock(used)}` }), ` · khổ ${aspect} · khoảng ${shots} cảnh · chờ khoảng ${minutes} phút${note}`);
 }
-function render() { renderPhotos(); renderSample(); renderSettings(); }
+// Nhạc nền: a track from the library (product-video-sources/music) or uploaded; the run lays it under the whole video.
+function renderMusic() {
+  const node = $("musicBox");
+  node.replaceChildren();
+  if (make.music) {
+    const audio = el("audio", { src: fileUrl(make.music), controls: true, preload: "metadata" });
+    audio.onclick = (e) => e.stopPropagation();
+    node.append(audio, clearButton("music"));
+  } else node.append(el("span", { className: "hint", textContent: "Bấm hoặc kéo file MP3, M4A, WAV vào, hoặc chọn từ kho. Không có thì video không có tiếng" }));
+  node.append(libraryButton("music", "Nhạc nền"));
+}
+function render() { renderPhotos(); renderSample(); renderMusic(); renderSettings(); }
 
 // Kho: the danh mục of this box's kind, then a click on a file downloads it (once) and fills the box.
 async function pickFromLibrary(key, title) {
   const kind = LIBRARY_KIND[key];
-  const isVideo = kind === "videos";
+  const isVideo = kind === "videos", isMusic = kind === "music";
   const shade = el("div", { className: "shade" });
   shade.innerHTML = `<div class="dialog library" role="dialog"><div class="top"><b>${title} từ kho</b><select></select></div><div class="grid"></div><div class="note small muted">Đang tải danh sách…</div><div class="actions"><button class="btn" type="button">Đóng</button></div></div>`;
   document.body.append(shade);
@@ -260,12 +283,19 @@ async function pickFromLibrary(key, title) {
   const show = () => {
     const group = groups[Number(select.value)];
     store.set(`library:${kind}`, group.name);
-    note.textContent = group.files.length ? `Bấm vào ${isVideo ? "video" : "ảnh"} để chọn.` : "Danh mục này chưa có gì.";
+    note.textContent = group.files.length ? (isMusic ? "Nghe thử rồi bấm Chọn." : `Bấm vào ${isVideo ? "video" : "ảnh"} để chọn.`) : "Danh mục này chưa có gì.";
     grid.replaceChildren(...group.files.map((f) => {
       const src = f.local ? fileUrl(f.local) : f.url;
-      const item = isVideo ? el("video", { src: `${src}#t=0.5`, muted: true, preload: "metadata", title: f.name }) : el("img", { src, alt: f.name, title: f.name, loading: "lazy", decoding: "async" });
-      if (isVideo) { item.onmouseenter = () => item.play().catch(() => {}); item.onmouseleave = () => item.pause(); }
-      item.onclick = async () => {
+      let item, pick;
+      if (isMusic) {
+        pick = el("button", { className: "btn", type: "button", textContent: "Chọn" });
+        item = el("div", { className: "track" });
+        item.append(el("span", { textContent: f.name, title: f.name }), el("audio", { src, controls: true, preload: "none" }), pick);
+      } else {
+        item = pick = isVideo ? el("video", { src: `${src}#t=0.5`, muted: true, preload: "metadata", title: f.name }) : el("img", { src, alt: f.name, title: f.name, loading: "lazy", decoding: "async" });
+        if (isVideo) { item.onmouseenter = () => item.play().catch(() => {}); item.onmouseleave = () => item.pause(); }
+      }
+      pick.onclick = async () => {
         note.textContent = "Đang tải…";
         const res = await fetch("/api/library/pick", { method: "POST", body: JSON.stringify({ kind, group: group.name, name: f.name }) }).catch(() => null);
         const body = res && (await res.json().catch(() => ({})));
@@ -279,24 +309,32 @@ async function pickFromLibrary(key, title) {
   show();
 }
 let pickFor = "photo";
+// What each box takes: the file types, the message when it is not one, and a name for a file that has none.
+const UPLOAD = {
+  reference: [/^video\/(mp4|quicktime|webm)$/, "Chọn video MP4, MOV hoặc WebM", "mau.mp4"],
+  music: [/^audio\/(mpeg|mp3|mp4|x-m4a|aac|wav|x-wav|wave)$/, "Chọn nhạc MP3, M4A, AAC hoặc WAV", "nhac.mp3"],
+  image: [/^image\/(png|jpeg|webp)$/, "Chọn ảnh PNG, JPEG hoặc WebP", "anh.png"],
+};
 async function upload(file, key) {
-  const video = key === "reference";
-  if (!file || !(video ? /^video\/(mp4|quicktime|webm)$/ : /^image\/(png|jpeg|webp)$/).test(file.type)) return toast(video ? "Chọn video MP4, MOV hoặc WebM" : "Chọn ảnh PNG, JPEG hoặc WebP");
-  if (video) toast("Đang tải video lên…");
-  const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name || (video ? "mau.mp4" : "anh.png"))}`, { method: "POST", body: file }).catch(() => null);
+  const [types, wrong, fallback] = UPLOAD[key] || UPLOAD.image;
+  if (!file || !types.test(file.type)) return toast(wrong);
+  if (key !== "photo" && key !== "model") toast("Đang tải lên…");
+  const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name || fallback)}`, { method: "POST", body: file }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));
   if (!r?.ok) return toast(body?.error || "Không tải lên được");
   make[key] = body.path; persist(); render();
 }
-for (const [box, key] of [...BOXES, ["sampleBox", "reference"]]) {
+const PICKER = { reference: "videoPicker", music: "audioPicker" };
+for (const [box, key] of [...BOXES, ["sampleBox", "reference"], ["musicBox", "music"]]) {
   const node = $(box);
-  node.onclick = () => { pickFor = key; const p = key === "reference" ? $("videoPicker") : $("picker"); p.value = ""; p.click(); };
+  node.onclick = () => { pickFor = key; const p = $(PICKER[key] || "picker"); p.value = ""; p.click(); };
   node.addEventListener("dragover", (e) => { e.preventDefault(); node.classList.add("dropping"); });
   node.addEventListener("dragleave", () => node.classList.remove("dropping"));
   node.addEventListener("drop", (e) => { e.preventDefault(); node.classList.remove("dropping"); upload(e.dataTransfer.files[0], key); });
 }
 $("picker").onchange = (e) => upload(e.target.files[0], pickFor);
 $("videoPicker").onchange = (e) => upload(e.target.files[0], "reference");
+$("audioPicker").onchange = (e) => upload(e.target.files[0], "music");
 // Ctrl+V: into the photo box under the mouse or focused; elsewhere, into the product box while it is empty, else the model's.
 // A screenshot comes as a file, an image copied from a page as an item.
 let pasteInto = "";
@@ -446,7 +484,7 @@ async function poll() {
 $("run").onclick = async () => {
   if (!make.photo) return toast("Thêm ảnh sản phẩm");
   if (!make.name.trim()) { $("name").focus(); return toast("Điền tên sản phẩm"); }
-  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, length: make.length, aspect: make.aspect, captions: make.captions ?? DATA.settings.captions === true, resolution: DATA.settings.defaultResolution };
+  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, music: make.music, length: make.length, aspect: make.aspect, captions: make.captions ?? DATA.settings.captions === true, resolution: DATA.settings.defaultResolution };
   Object.assign(run, { since: 0, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 });
   const r = await fetch("/api/run", { method: "POST", body: JSON.stringify(job) }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));

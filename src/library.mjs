@@ -1,9 +1,9 @@
 // Kho ảnh: the public GitHub repo hoangpham2263/product-video-sources. manifest.json lists its groups, each of one kind
-// (products, models, videos) with its files; a file is <kind>/<group>/<name>. The window shows a kind's switched-on
+// (products, models, videos, music) with its files; a file is <kind>/<group>/<name>. The window shows a kind's switched-on
 // groups with raw links as thumbnails; a picked photo or video is downloaded once into workspace/library/<kind>/<group>/
 // and its local path goes into the job, as an uploaded one does. A video's plan (its shots and angles, in the manifest)
 // is saved beside it as <video>.json, where the run reads it. PV_SOURCES_URL points tests at a local copy.
-//   GET  /api/library?kind=products|models|videos{ groups: [{ name, files: [{ name, url, local }] }] } or { error }
+//   GET  /api/library?kind=products|models|videos|music{ groups: [{ name, files: [{ name, url, local }] }] } or { error }
 //   POST /api/library/pick { kind, group, name }   { path }
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
@@ -12,7 +12,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 export const SOURCES_URL = "https://raw.githubusercontent.com/hoangpham2263/product-video-sources/main";
-const FILES = { products: /\.(png|jpe?g|webp)$/i, models: /\.(png|jpe?g|webp)$/i, videos: /\.(mp4|mov|webm)$/i };
+const FILES = { products: /\.(png|jpe?g|webp)$/i, models: /\.(png|jpe?g|webp)$/i, videos: /\.(mp4|mov|webm)$/i, music: /\.(mp3|m4a|aac|wav)$/i };
 const KINDS = Object.keys(FILES);
 const safe = (s) => typeof s === "string" && s.length > 0 && s.length <= 200 && !/[\\/]|^\.\.?$/.test(s);
 

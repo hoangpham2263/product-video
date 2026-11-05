@@ -1,4 +1,5 @@
-﻿# Editing a run's clips with ffmpeg (ffmpeg.ps1): each Grok clip cut to its shot, then all joined by their transitions.
+﻿# Editing a run's clips with ffmpeg (ffmpeg.ps1): each Grok clip cut to its shot, then all joined by their transitions;
+# last, the music under the whole video.
 
 # The first $Seconds of a clip at its real speed, without sound, at $Fps.
 function Set-HubVideoCut([string]$Video, [double]$Seconds, [string]$Output, [int]$Fps = 30) {
@@ -27,4 +28,15 @@ function Join-ShotClips([string[]]$Files, [double]$Fade, [string]$Output, [strin
     $chains[-1] = $chains[-1] -replace '\[(\w+)\]$', ',format=yuv420p[$1]'
     $arguments = @('-y', '-hide_banner') + $inputs + @('-filter_complex', ($chains -join ';'), '-map', "[$label]", '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', '-crf', '18', '-movflags', '+faststart', '-an', $Output)
     Assert-HubFfmpeg (Invoke-HubFfmpeg $arguments) 'ghép được video'
+}
+
+# The music track under the whole video: from its start, cut to the video's length (looped when shorter), fading in over
+# $FadeIn and out over the last $FadeOut seconds, at $Volume. The picture is copied as it is; sound AAC, ready to post.
+function Add-VideoMusic([string]$Video, [string]$Music, [string]$Output, [double]$Volume = 0.8, [double]$FadeIn = 1, [double]$FadeOut = 2) {
+    $seconds = (Get-HubVideoInfo $Video).Seconds
+    if ($seconds -le 0) { throw "Không đọc được độ dài video: $Video" }
+    $out = [Math]::Max(0.0, $seconds - $FadeOut)
+    $audio = "[1:a]atrim=0:$(Format-Seconds $seconds),asetpts=PTS-STARTPTS,afade=t=in:d=$(Format-Seconds $FadeIn),afade=t=out:st=$(Format-Seconds $out):d=$(Format-Seconds $FadeOut),volume=$(Format-Seconds $Volume)[a]"
+    $arguments = @('-y', '-hide_banner', '-i', $Video, '-stream_loop', '-1', '-i', $Music, '-filter_complex', $audio, '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-t', (Format-Seconds $seconds), '-movflags', '+faststart', $Output)
+    Assert-HubFfmpeg (Invoke-HubFfmpeg $arguments) 'ghép được nhạc'
 }

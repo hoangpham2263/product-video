@@ -21,7 +21,7 @@ function ConvertTo-Slug([string]$Text) {
 }
 function Get-ErrorCause([string]$Message) { if ($Message -match '\[CAUSE:(\w+)\]') { $Matches[1] } else { 'UNKNOWN' } }
 
-# The job the window sends, checked: { product, photo, model?, reference?, length, aspect, resolution, captions? }.
+# The job the window sends, checked: { product, photo, model?, reference?, music?, length, aspect, resolution, captions? }.
 # Length: seconds (one of lengths; 0 is as long as the sample, or defaultLength without one). Aspect: one of aspects
 # (auto: the sample's shape, else 2:3). Captions: English lines written by Codex and burnt in (default: settings).
 function Test-VideoJob($Job) {
@@ -30,6 +30,7 @@ function Test-VideoJob($Job) {
     if (-not $Job.photo -or -not (Test-Path -LiteralPath ([string]$Job.photo) -PathType Leaf)) { throw 'Chưa có ảnh sản phẩm.' }
     if ($Job.model -and -not (Test-Path -LiteralPath ([string]$Job.model) -PathType Leaf)) { throw 'Không thấy ảnh người mẫu.' }
     if ($Job.reference -and -not (Test-Path -LiteralPath ([string]$Job.reference) -PathType Leaf)) { throw 'Không thấy video mẫu.' }
+    if ($Job.music -and -not (Test-Path -LiteralPath ([string]$Job.music) -PathType Leaf)) { throw 'Không thấy file nhạc nền.' }
     if (@($settings.resolutions) -notcontains [string]$Job.resolution) { throw "Độ phân giải không hỗ trợ: $($Job.resolution)." }
     $aspect = if ($Job.aspect) { [string]$Job.aspect } else { 'auto' }
     if (@($settings.aspects) -notcontains $aspect) { throw "Khổ video không hỗ trợ: $aspect." }
@@ -37,7 +38,7 @@ function Test-VideoJob($Job) {
     if ($length -and @($settings.lengths) -notcontains $length) { throw "Độ dài video $(@($settings.lengths) -join ', ') giây, không phải $length." }
     if (-not $length -and -not $Job.reference) { $length = [int]$settings.defaultLength }
     [pscustomobject]@{
-        Product = ([string]$Job.product).Trim(); Photo = [string]$Job.photo; Model = [string]$Job.model; Reference = [string]$Job.reference
+        Product = ([string]$Job.product).Trim(); Photo = [string]$Job.photo; Model = [string]$Job.model; Reference = [string]$Job.reference; Music = [string]$Job.music
         Length = $length; Aspect = $aspect; Resolution = [string]$Job.resolution; Settings = $settings
         Captions = $(if ($null -ne $Job.captions) { [bool]$Job.captions } else { [bool]$settings.captions })
     }
@@ -172,6 +173,14 @@ function Invoke-VideoRun($Job, [string]$OutRoot) {
                 try { Add-BrandIntroOutro $stage $final $brand }
                 catch { Copy-Item -LiteralPath $stage -Destination $final -Force; Send-Event @{ kind = 'warning'; message = "Chưa thêm được intro/outro, video không có: $($_.Exception.Message)" } }
             } else { Copy-Item -LiteralPath $stage -Destination $final -Force }
+            # Music last, under the whole video (outro too): video-<product>.mp4 gets the sound, the silent one is kept
+            # as video-<product>-khong-nhac.mp4.
+            if ($plan.Music) {
+                $silent = Join-Path $folder "video-$slug-khong-nhac.mp4"
+                Move-Item -LiteralPath $final -Destination $silent -Force
+                try { Add-VideoMusic $silent $plan.Music $final ([double]$settings.musicVolume) ([double]$settings.musicFadeIn) ([double]$settings.musicFadeOut) }
+                catch { Copy-Item -LiteralPath $silent -Destination $final -Force; Send-Event @{ kind = 'warning'; message = "Chưa ghép được nhạc nền, video không có nhạc: $($_.Exception.Message)" } }
+            }
             $out = Get-HubVideoInfo $final
             Send-Event @{ kind = 'final'; file = $final; seconds = [Math]::Round($out.Seconds, 1); width = $out.Width; height = $out.Height }
             $ok = $true
