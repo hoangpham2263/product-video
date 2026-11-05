@@ -50,7 +50,6 @@ main { height: 100%; display: flex; flex-direction: column; }
 .shade { z-index: 20; } /* above the photo boxes' own buttons */
 /* Hiệu ứng, Góc máy: every transition or angle as a card with its sample; its Dùng checkbox switches it on or off. */
 .cards-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.cards-top .note { flex: 1; }
 .card[hidden], .cards h3[hidden] { display: none; }
 .card .use { display: flex; align-items: center; gap: 6px; margin: 4px 8px 8px; font-size: 13px; color: #006400; cursor: pointer; }
 .card .use input { margin: 0; width: 16px; height: 16px; cursor: pointer; }
@@ -166,7 +165,7 @@ header .seg { margin-left: 16px; }
   <div class="page" id="fx" hidden>
     <section class="group grow">
       <h2>Hiệu ứng chuyển cảnh <span class="muted small" id="fxStatus"></span></h2>
-      <div class="cards-top"><div class="seg" id="fxFilter"></div><div class="note small">Rê chuột lên ảnh để xem. Tích <b>Dùng</b> để bật/tắt, lưu ngay. Video chỉ dùng hiệu ứng đang bật.</div></div>
+      <div class="cards-top"><div class="seg" id="fxFilter"></div></div>
       <div class="cards" id="fxCards"></div>
     </section>
   </div>
@@ -174,7 +173,7 @@ header .seg { margin-left: 16px; }
   <div class="page" id="angles" hidden>
     <section class="group grow">
       <h2>Góc máy <span class="muted small" id="angleStatus"></span></h2>
-      <div class="cards-top"><div class="seg" id="anglesFilter"></div><div class="note small">Rê chuột lên ảnh để đọc mô tả. Tích <b>Dùng</b> để bật/tắt, lưu ngay. Góc đang tắt thì video bỏ qua, lấy góc kế tiếp.</div></div>
+      <div class="cards-top"><div class="seg" id="anglesFilter"></div></div>
       <div class="cards" id="angleCards"></div>
     </section>
   </div>
@@ -187,7 +186,14 @@ header .seg { margin-left: 16px; }
 <script>
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
-const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+// What the window remembers (page, filters, the job, the library group, the video analysed): workspace/giao-dien.json
+// through /api/ui-state (src/server.mjs), read once at start; new source starts clean.
+const UI = {};
+let uiSave = 0;
+const store = {
+  get: (k, d) => UI[k] ?? d,
+  set(k, v) { UI[k] = v; clearTimeout(uiSave); uiSave = setTimeout(() => fetch("/api/ui-state", { method: "POST", body: JSON.stringify(UI) }).catch(() => {}), 300); },
+};
 function toast(text) { const t = $("toast"); t.textContent = text; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
 // The page is served by src/server.mjs.
 window.addEventListener("error", (e) => fetch("/api/client-error", { method: "POST", body: JSON.stringify({ message: e.message, stack: e.error?.stack || "" }) }).catch(() => {}));
@@ -197,7 +203,7 @@ window.addEventListener("error", (e) => fetch("/api/client-error", { method: "PO
 const fileUrl = (path) => `/file?path=${encodeURIComponent(path)}`;
 const KEY = "product-video:make:v1";
 let DATA = { settings: { lengths: [30], defaultLength: 30, aspects: ["auto"], defaultResolution: "720p", shotSeconds: 2.6, maxSeconds: 60, minutesPerShot: 1.2, minutesPerFrameRound: 2, codexParallel: 4 } };
-const make = Object.assign({ photo: "", model: "", name: "", reference: "", length: 0, aspect: "auto", captions: null }, store.get(KEY, {}));
+const make = { photo: "", model: "", name: "", reference: "", length: 0, aspect: "auto", captions: null };
 const run = { since: 0, running: false, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 };
 const persist = () => store.set(KEY, make);
 
@@ -403,6 +409,7 @@ function choiceCard(list, id, media, name, sub, onSaved) {
 // Lọc: Tất cả / Đang dùng / Không dùng, one row above each list of cards.
 const FILTERS = [["all", "Tất cả"], ["on", "Đang dùng"], ["off", "Không dùng"]];
 const filterOf = { fx: "all", angles: "all" };
+const filterDraw = {};
 function applyFilter() {
   for (const [page, cards] of [["fx", "fxCards"], ["angles", "angleCards"]]) {
     const f = filterOf[page];
@@ -419,9 +426,10 @@ for (const page of ["fx", "angles"]) {
   const draw = () => seg.replaceChildren(...FILTERS.map(([v, label]) => {
     const b = el("button", { type: "button", textContent: label });
     b.setAttribute("aria-pressed", filterOf[page] === v);
-    b.onclick = () => { filterOf[page] = v; draw(); applyFilter(); };
+    b.onclick = () => { filterOf[page] = v; store.set(`filter:${page}`, v); draw(); applyFilter(); };
     return b;
   }));
+  filterDraw[page] = draw;
   draw();
 }
 // The still a card shows: before the cut (samples cut from 1 s to 2 s), so the picture is sharp; any frame inside the cut
@@ -568,12 +576,13 @@ async function loadAnalyzeList() {
   const options = r.videos.map((v) => ({ value: v.path, textContent: `${v.name}${v.plan ? " (có kế hoạch)" : ""}` }));
   if (make.reference && !options.some((o) => o.value === make.reference)) options.unshift({ value: make.reference, textContent: "Video mẫu đang chọn ở Tạo video" });
   $("anList").replaceChildren(...(options.length ? options : [{ value: "", textContent: "Chưa có video: chọn video mẫu ở Tạo video hoặc Từ kho" }]).map((o) => el("option", o)));
-  if (an.video && options.some((o) => o.value === an.video)) $("anList").value = an.video;
+  const last = an.video || store.get("analyze", "");
+  if (last && options.some((o) => o.value === last)) $("anList").value = last;
   pickAnalyze($("anList").value);
 }
 function pickAnalyze(video) {
   if (video === an.video && $("anBox").firstChild) return;
-  an.video = video; an.result = null;
+  an.video = video; an.result = null; store.set("analyze", video);
   $("anBox").replaceChildren(video ? el("video", { src: fileUrl(video), muted: true, controls: true, playsInline: true }) : Object.assign(el("span"), { innerHTML: "<b>Chưa có video</b>" }));
   $("anRun").disabled = !video; $("anUse").disabled = !video;
   renderShots();
@@ -633,8 +642,12 @@ $("anSave").onclick = async () => {
   loadAnalyzeList();
 };
 
-fetch("/api/data").then((r) => r.json()).then((data) => {
+Promise.all([fetch("/api/data").then((r) => r.json()), fetch("/api/ui-state").then((r) => r.json()).catch(() => ({}))]).then(([data, ui]) => {
   DATA = data;
+  Object.assign(UI, ui);
+  Object.assign(make, store.get(KEY, {}));
+  $("name").value = make.name;
+  for (const page of ["fx", "angles"]) { filterOf[page] = store.get(`filter:${page}`, "all"); filterDraw[page](); }
   if (make.length && !data.settings.lengths.includes(make.length)) make.length = 0;
   if (!data.settings.aspects.includes(make.aspect)) make.aspect = "auto";
   render(); renderRun(); poll();

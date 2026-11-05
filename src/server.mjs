@@ -182,6 +182,24 @@ const sendFile = (req, res, file) => {
 };
 // Only what this tool wrote (its uploads and results) is served back to the window.
 const allowedFile = (p) => { const full = resolve(p); return full.startsWith(workspace + sep) && SERVED_EXT.includes(extname(full).toLowerCase()); };
+// Giao diện: what the window last showed (page, filters, the job's boxes and settings, the video being analysed), in
+// workspace/giao-dien.json so it outlives a change of port. Stamped with the source in use (the release of a ZIP
+// install, else the git commit): new source starts from a clean window (user, 05/11/2026). lua-chon.json is not part
+// of it and stays.
+const uiStateFile = join(workspace, "giao-dien.json");
+function sourceStamp() {
+  const v = version();
+  if (v) return v;
+  try {
+    const head = readFileSync(join(root, ".git", "HEAD"), "utf8").trim();
+    if (!head.startsWith("ref: ")) return head;
+    const ref = head.slice(5);
+    const loose = join(root, ".git", ref);
+    if (existsSync(loose)) return readFileSync(loose, "utf8").trim();
+    const packed = readFileSync(join(root, ".git", "packed-refs"), "utf8").split("\n").find((l) => l.endsWith(` ${ref}`));
+    return packed ? packed.split(" ")[0] : "";
+  } catch { return ""; }
+}
 const version = () => { try { return readFileSync(join(root, "workspace", "version.txt"), "utf8").trim(); } catch { return ""; } };
 const q = (p) => p.replace(/'/g, "''");
 const pwshOut = (command, timeout) => new Promise((done, fail) => execFile(PWSH, psCommand(command), { cwd: root, env: toolEnv, timeout, windowsHide: true }, (err, out) => (err ? fail(err) : done(String(out).trim()))));
@@ -226,6 +244,17 @@ async function handle(req, res) {
   if (path === "/api/analyze/save" && req.method === "POST") {
     try { return send(res, 200, await savePlan(JSON.parse((await body(req)).toString("utf8") || "{}"))); }
     catch (e) { return send(res, 400, { error: e.message }); }
+  }
+  if (path === "/api/ui-state" && req.method === "GET") {
+    const saved = existsSync(uiStateFile) ? await readJson(uiStateFile).catch(() => ({})) : {};
+    return send(res, 200, saved.stamp === sourceStamp() ? saved.state || {} : {});
+  }
+  if (path === "/api/ui-state" && req.method === "POST") {
+    try {
+      const state = JSON.parse((await body(req)).toString("utf8") || "{}");
+      await writeFile(uiStateFile, JSON.stringify({ stamp: sourceStamp(), state }, null, 2) + "\n", "utf8");
+      return send(res, 200, { ok: true });
+    } catch (e) { return send(res, 400, { error: e.message }); }
   }
   if (path === "/api/choices" && req.method === "POST") {
     try { return send(res, 200, await saveChoice(JSON.parse((await body(req)).toString("utf8") || "{}"))); }
