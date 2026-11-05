@@ -328,7 +328,7 @@ function renderSettings() {
   seg("length", lengths, make.reference ? make.length : make.length || DATA.settings.defaultLength, "length", (v) => (v ? `${v}s` : "Như mẫu"));
   seg("aspect", DATA.settings.aspects, make.aspect, "aspect", (v) => ASPECT_LABEL[v] || v);
   // Captions: English lines Codex writes from the shots and the brand (src/script.ps1), burnt in; null = the default.
-  seg("captions", [true, false], make.captions ?? DATA.settings.captions !== false, "captions", (v) => (v ? "Có" : "Không"));
+  seg("captions", [true, false], make.captions ?? DATA.settings.captions === true, "captions", (v) => (v ? "Có" : "Không"));
 }
 // Hiệu ứng, Góc máy: every transition (a sample clip) and angle (a sample frame) from product-video-sources/samples, as a
 // card; a click switches it on or off and saves the list at once (server.mjs: workspace/lua-chon.json, which the run
@@ -445,7 +445,7 @@ async function poll() {
 $("run").onclick = async () => {
   if (!make.photo) return toast("Thêm ảnh sản phẩm");
   if (!make.name.trim()) { $("name").focus(); return toast("Điền tên sản phẩm"); }
-  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, length: make.length, aspect: make.aspect, captions: make.captions ?? DATA.settings.captions !== false, resolution: DATA.settings.defaultResolution };
+  const job = { product: make.name.trim(), photo: make.photo, model: make.model, reference: make.reference, length: make.length, aspect: make.aspect, captions: make.captions ?? DATA.settings.captions === true, resolution: DATA.settings.defaultResolution };
   Object.assign(run, { since: 0, steps: {}, final: null, folder: "", summary: null, fatal: "", warnings: [], frames: 0, shots: 0 });
   const r = await fetch("/api/run", { method: "POST", body: JSON.stringify(job) }).catch(() => null);
   const body = r && (await r.json().catch(() => ({})));
