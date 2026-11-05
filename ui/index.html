@@ -394,11 +394,27 @@ function choiceCard(list, id, media, name, sub, onSaved) {
   show();
   return card;
 }
+// The samples load only once their card is on screen: all 46 at once made the window drop some, which stayed blank
+// (05/11/2026, Lộ dần). A load that fails or stalls is tried again, up to 3 times.
+const fxSeen = new IntersectionObserver((entries) => {
+  for (const { target: v, isIntersecting } of entries) {
+    if (!isIntersecting || v.getAttribute("src")) continue;
+    fxSeen.unobserve(v);
+    let tries = 0;
+    const load = () => { v.src = `${v.dataset.src}${tries ? `?r=${tries}` : ""}#t=1.5`; v.load(); };
+    const retry = () => { if (v.readyState < 2 && tries < 3) { tries++; setTimeout(load, 800 * tries); } };
+    v.onerror = retry;
+    v.onstalled = () => setTimeout(retry, 4000);
+    load();
+  }
+}, { rootMargin: "200px" });
 function renderFx() {
   const names = DATA.settings.transitionNames || [];
   const status = () => { $("fxStatus").textContent = `· đang dùng ${names.length - (DATA.settings.bannedTransitions || []).length}/${names.length}`; };
   $("fxCards").replaceChildren(...names.map((n) => {
-    const video = el("video", { src: `${DATA.samples}/transitions/${n}.mp4#t=1.5`, muted: true, loop: true, playsInline: true, preload: "metadata" });
+    const video = el("video", { muted: true, loop: true, playsInline: true, preload: "auto" });
+    video.dataset.src = `${DATA.samples}/transitions/${n}.mp4`;
+    fxSeen.observe(video);
     video.onmouseenter = () => { video.currentTime = 0; video.play().catch(() => {}); };
     video.onmouseleave = () => { video.pause(); video.currentTime = 1.5; };
     return choiceCard("bannedTransitions", n, video, FX_LABEL[n] || n, n, status);
