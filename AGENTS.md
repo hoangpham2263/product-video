@@ -10,6 +10,10 @@ Repo `hoangpham2263/product-video` (tách từ tool Grok Video của Tools Hub).
 - Phát hành: push tag `vX.Y.Z` → Release `product-video.zip`; Cập nhật thay file, giữ `workspace/`, `core/bridge/node_modules`. Trang tải `docs/index.html` (GitHub Pages) chỉ có nút tải.
 - Commit chỉ đứng tên người dùng, không thêm dòng Claude.
 
+## Lựa chọn của người dùng (bắt buộc với mọi người chạy, kể cả Claude/Codex chạy tay)
+
+`workspace/lua-chon.json` (`bannedTransitions`, `bannedAngles`) là nguồn duy nhất cho hiệu ứng và góc máy được dùng; người dùng bật/tắt ở trang **Hiệu ứng** và **Góc máy**. Mọi script, kể cả script tự viết hay ghép video bằng ffmpeg tay, phải lấy cài đặt qua `Get-VideoSettings` (không `-Defaults`) hoặc đọc file này ngay lúc chạy, và không bao giờ dùng hiệu ứng/góc đang tắt. Không tự sửa file này; muốn tắt/bật thêm thì hỏi người dùng. `data/video.json` chỉ là mặc định khi chưa lưu lựa chọn; `-Defaults` chỉ dành cho test.
+
 ## Tạo video
 
 Một cách làm duy nhất (người dùng chốt 04/11/2026, sau khi thử các cách khác): video là chuỗi **cảnh ngắn** (tối đa `shotSeconds`, 2,6 giây), mỗi cảnh một góc và một kiểu máy chạy. **Codex CLI** vẽ khung góc từ ảnh sản phẩm, **Grok** quay mỗi cảnh một clip 6 giây từ khung đó, lấy phần đầu ở tốc độ thật, nối bằng chuyển cảnh hợp với hai cảnh, dài `fadeSeconds` (0,7 giây). Người dùng gửi ảnh sản phẩm (bắt buộc), người mẫu (tuỳ chọn, giới thiệu ở cảnh đầu) và **video mẫu (tuỳ chọn)**: chỉ học **cách làm** (nhịp cắt, chuỗi góc, máy chạy), không lấy hình hay phòng của mẫu; bối cảnh luôn là phòng trong ảnh sản phẩm. Grok web chạy trong Chrome chính đã đăng nhập grok.com, qua extension Product Video và bridge (`core/bridge`, cổng 8785).
